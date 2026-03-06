@@ -405,15 +405,12 @@ class PDFFormExtractor:
     ) -> list[str]:
         """Validate form data against PDF form fields.
 
-        This method validates that the provided form data matches the structure
-        and field types of the PDF form. It checks:
-        - All referenced fields exist in the form
-        - Field value types match expected types
-        - Required fields have values (when strict=True)
+        This method validates that the provided form data (simple key:value format)
+        matches the structure and field types of the PDF form.
 
         Args:
             pdf_path: Path to the PDF file.
-            form_data: The form data to validate (must match export format).
+            form_data: The form data to validate (simple format: {"Field Name": value}).
             strict: If True, also checks that all form fields are provided.
             allow_extra_fields: If True, allows fields not present in the form.
 
@@ -435,98 +432,44 @@ class PDFFormExtractor:
         except PDFFormNotFoundError:
             return ["PDF does not contain a form"]
 
-        # Build lookup maps
-        fields_by_id = {f.id: f for f in form_data_obj.fields}
+        # Build lookup by name
         fields_by_name = {f.name: f for f in form_data_obj.fields}
 
-        # Extract fields from input data
-        input_fields: dict[str, dict[str, Any]] = {}
-        forms = form_data.get("forms", [])
-        if forms and isinstance(forms, list):
-            form = forms[0]
-            field_types = [
-                "textfield",
-                "datefield",
-                "checkbox",
-                "radiobuttongroup",
-                "combobox",
-                "listbox",
-            ]
-            for field_type in field_types:
-                for field in form.get(field_type, []):
-                    field_id = field.get("id")
-                    field_name = field.get("name")
-                    key = field_id or field_name
-                    if key:
-                        input_fields[key] = {
-                            "type": field_type,
-                            "id": field_id,
-                            "name": field_name,
-                            "value": field.get("value"),
-                            "locked": field.get("locked"),
-                        }
-
-        # Validate each input field exists in form
+        # Validate each input field
         if not allow_extra_fields:
-            for key, field_info in input_fields.items():
-                if key not in fields_by_id and key not in fields_by_name:
-                    field_name = field_info.get("name")
-                    field_id = field_info.get("id")
-                    if field_name and field_id:
-                        errors.append(
-                            f"Field not found in form: '{field_name}' (id: {field_id})"
-                        )
-                    elif field_name:
-                        errors.append(f"Field not found in form: '{field_name}'")
-                    else:
-                        errors.append(f"Field not found in form: id '{field_id}'")
+            for field_name, value in form_data.items():
+                if field_name not in fields_by_name:
+                    errors.append(f"Field not found in form: '{field_name}'")
                     continue
 
+                field = fields_by_name[field_name]
+
                 # Validate value type matches field type
-                pdf_field = fields_by_id.get(key) or fields_by_name.get(key)
-                if pdf_field:
-                    value = field_info["value"]
-                    if pdf_field.field_type == "checkbox" and not isinstance(value, bool):
-                        field_label = field_info.get("name") or key
-                        errors.append(
-                            f"Field '{field_label}': checkbox value must be boolean, "
-                            f"got {type(value).__name__}"
-                        )
+                if field.field_type == "checkbox" and not isinstance(value, bool):
+                    errors.append(
+                        f"Field '{field_name}': checkbox value must be boolean, "
+                        f"got {type(value).__name__}"
+                    )
 
         # In strict mode, check all form fields are provided
         if strict:
-            provided_keys = set(input_fields.keys())
+            provided_names = set(form_data.keys())
             for field in form_data_obj.fields:
-                if field.id not in provided_keys and field.name not in provided_keys:
-                    errors.append(f"Required field not provided: '{field.name}' (id: {field.id})")
+                if field.name not in provided_names:
+                    errors.append(f"Required field not provided: '{field.name}'")
 
         return errors
 
-    def _is_simple_format(self, form_data: dict[str, Any]) -> bool:
-        """Check if form_data is in simple key:value format.
-
-        Simple format: {"Field Name": "value", "Checkbox": true}
-        pdfcpu format: {"forms": [{"textfield": [...]}]}
-
-        Args:
-            form_data: The form data to check.
-
-        Returns:
-            True if simple format, False if pdfcpu format.
-        """
-        if not form_data:
-            return True  # Empty dict is considered simple format
-        # If it has "forms" key with list value, it's pdfcpu format
-        return not ("forms" in form_data and isinstance(form_data["forms"], list))
-
-    def _convert_simple_to_pdfcpu_format(
-        self, pdf_path: str | Path, simple_data: dict[str, Any]
+    def _convert_to_pdfcpu_format(
+        self, pdf_path: str | Path, form_data: dict[str, Any]
     ) -> dict[str, Any]:
         """Convert simple key:value format to pdfcpu export format.
 
+        This is an internal helper method used by fill_form.
+
         Args:
             pdf_path: Path to the PDF file.
-            simple_data: Simple format data {"Field Name": value}.
+            form_data: Simple format data {"Field Name": value}.
 
         Returns:
             pdfcpu format data structure.
@@ -562,7 +505,7 @@ class PDFFormExtractor:
 
         form = pdfcpu_data["forms"][0]
 
-        for field_name, value in simple_data.items():
+        for field_name, value in form_data.items():
             field = fields_by_name.get(field_name)
             if not field:
                 continue  # Skip unknown fields, validation will catch them
@@ -587,64 +530,6 @@ class PDFFormExtractor:
 
         return pdfcpu_data
 
-    def validate_simple_form_data(
-        self,
-        pdf_path: str | Path,
-        simple_data: dict[str, Any],
-        *,
-        strict: bool = False,
-        allow_extra_fields: bool = False,
-    ) -> list[str]:
-        """Validate simple key:value format form data.
-
-        Args:
-            pdf_path: Path to the PDF file.
-            simple_data: Simple format data {"Field Name": value}.
-            strict: If True, also checks that all form fields are provided.
-            allow_extra_fields: If True, allows fields not present in the form.
-
-        Returns:
-            List of validation error messages (empty if valid).
-        """
-        pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
-
-        errors: list[str] = []
-
-        # Get the form fields from the PDF
-        try:
-            form_data_obj = self.extract(pdf_path)
-        except PDFFormNotFoundError:
-            return ["PDF does not contain a form"]
-
-        # Build lookup by name
-        fields_by_name = {f.name: f for f in form_data_obj.fields}
-
-        # Validate each input field
-        if not allow_extra_fields:
-            for field_name, value in simple_data.items():
-                if field_name not in fields_by_name:
-                    errors.append(f"Field not found in form: '{field_name}'")
-                    continue
-
-                field = fields_by_name[field_name]
-
-                # Validate value type matches field type
-                if field.field_type == "checkbox" and not isinstance(value, bool):
-                    errors.append(
-                        f"Field '{field_name}': checkbox value must be boolean, "
-                        f"got {type(value).__name__}"
-                    )
-
-        # In strict mode, check all form fields are provided
-        if strict:
-            provided_names = set(simple_data.keys())
-            for field in form_data_obj.fields:
-                if field.name not in provided_names:
-                    errors.append(f"Required field not provided: '{field.name}'")
-
-        return errors
-
     def fill_form(
         self,
         pdf_path: str | Path,
@@ -653,15 +538,14 @@ class PDFFormExtractor:
         *,
         validate: bool = True,
     ) -> Path:
-        """Fill a PDF form with data from a JSON structure.
+        """Fill a PDF form with data.
 
-        This method accepts data in two formats:
-        1. Simple key:value format: {"Field Name": "value", "Checkbox": true}
-        2. pdfcpu export format: {"forms": [{"textfield": [...]}]}
+        This method accepts form data in simple key:value format where keys are
+        field names and values are the values to fill.
 
         Args:
             pdf_path: Path to the PDF file containing the form.
-            form_data: The form data to fill (simple format or pdfcpu format).
+            form_data: The form data to fill (format: {"Field Name": value}).
             output_path: Optional output path. If not provided, the input PDF
                         is modified in place (pdfcpu default behavior).
             validate: If True, validates form data before filling.
@@ -676,18 +560,7 @@ class PDFFormExtractor:
             PDFFormNotFoundError: If the PDF does not contain a form.
 
         Example:
-            >>> # Simple format
             >>> form_data = {"Candidate Name": "John Smith", "Full time": True}
-            >>> extractor.fill_form("form.pdf", form_data, "filled.pdf")
-
-            >>> # pdfcpu format
-            >>> form_data = {
-            ...     "forms": [{
-            ...         "textfield": [
-            ...             {"name": "firstName", "value": "John", "locked": False}
-            ...         ]
-            ...     }]
-            ... }
             >>> extractor.fill_form("form.pdf", form_data, "filled.pdf")
         """
         pdf_path = Path(pdf_path)
@@ -697,25 +570,18 @@ class PDFFormExtractor:
         if not self.has_form(pdf_path):
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
-        # Detect format and convert if necessary
-        is_simple = self._is_simple_format(form_data)
-
         # Validate form data if requested
         if validate:
-            if is_simple:
-                errors = self.validate_simple_form_data(pdf_path, form_data)
-            else:
-                errors = self.validate_form_data(pdf_path, form_data)
+            errors = self.validate_form_data(pdf_path, form_data)
             if errors:
                 raise FormValidationError("Form data validation failed", errors)
 
-        # Convert simple format to pdfcpu format if needed
-        if is_simple:
-            form_data = self._convert_simple_to_pdfcpu_format(pdf_path, form_data)
+        # Convert simple format to pdfcpu format for the fill command
+        pdfcpu_data = self._convert_to_pdfcpu_format(pdf_path, form_data)
 
         # Write form data to temporary JSON file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-            json.dump(form_data, tmp, indent=2)
+            json.dump(pdfcpu_data, tmp, indent=2)
             tmp_path = Path(tmp.name)
 
         try:
@@ -749,6 +615,9 @@ class PDFFormExtractor:
         validate: bool = True,
     ) -> Path:
         """Fill a PDF form with data from a JSON file.
+
+        The JSON file should contain simple key:value pairs where keys are
+        field names and values are the values to fill.
 
         Args:
             pdf_path: Path to the PDF file containing the form.

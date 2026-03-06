@@ -57,10 +57,7 @@ pdf-forms extract form.pdf -o output.json
 # Extract form data to stdout
 pdf-forms extract form.pdf
 
-# Fill a form from JSON (auto-detects format, validates before filling)
-pdf-forms fill-form form.pdf data.json -o filled.pdf
-
-# Fill using simple key:value format (recommended)
+# Fill a form from JSON (validates before filling)
 pdf-forms fill-form form.pdf data.json -o filled.pdf
 
 # Fill a form without validation
@@ -73,13 +70,9 @@ pdf-forms fill-form form.pdf data.json
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
 ```
 
-#### JSON Formats
+#### JSON Format
 
-The `fill-form` command accepts two JSON formats:
-
-**1. Simple Key:Value Format (Recommended)**
-
-Just provide field names and values:
+The `fill-form` command accepts a simple key:value JSON format where keys are field names and values are the values to fill:
 
 ```json
 {
@@ -90,25 +83,6 @@ Just provide field names and values:
   "Diploma or GED": "Yes"
 }
 ```
-
-**2. pdfcpu Export Format**
-
-Use the full format produced by `pdf-forms extract`:
-
-```json
-{
-  "forms": [{
-    "textfield": [
-      {"name": "Candidate Name", "value": "John Smith", "locked": false}
-    ],
-    "checkbox": [
-      {"name": "Full time", "value": true, "locked": false}
-    ]
-  }]
-}
-```
-
-The format is auto-detected. Use `--simple` to force simple format.
 
 ### Python API
 
@@ -139,33 +113,20 @@ has_form = extractor.has_form("form.pdf")
 # Export to JSON file
 extractor.extract_to_json("form.pdf", "output.json")
 
-# Fill a form using simple key:value format (recommended)
-simple_data = {
+# Fill a form using simple key:value format
+form_data = {
     "Candidate Name": "John Smith",
     "Position": "Software Engineer",
     "Full time": True,
     "Start date": "2025-06-01"
 }
-extractor.fill_form("form.pdf", simple_data, "filled.pdf")
+extractor.fill_form("form.pdf", form_data, "filled.pdf")
 
-# Or use pdfcpu export format
-pdfcpu_data = {
-    "forms": [{
-        "textfield": [
-            {"name": "firstName", "value": "John", "locked": False}
-        ],
-        "checkbox": [
-            {"id": "agree", "value": True, "locked": True}
-        ]
-    }]
-}
-extractor.fill_form("form.pdf", pdfcpu_data, "filled.pdf")
-
-# Or fill from a JSON file (auto-detects format)
+# Or fill from a JSON file
 extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
 
 # Validate data before filling (returns list of errors)
-errors = extractor.validate_simple_form_data("form.pdf", simple_data)
+errors = extractor.validate_form_data("form.pdf", form_data)
 if errors:
     print("Validation errors:", errors)
 ```
@@ -195,9 +156,8 @@ extractor = PDFFormExtractor(pdfcpu_path: str | None = None)
 - `get_field_value(pdf_path: str | Path, field_name: str) -> str | bool | None`: Get the value of a specific form field.
 - `get_field_by_id(pdf_path: str | Path, field_id: str) -> FormField | None`: Get a form field by its ID.
 - `get_field_by_name(pdf_path: str | Path, field_name: str) -> FormField | None`: Get a form field by its name.
-- `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate pdfcpu format JSON data.
-- `validate_simple_form_data(pdf_path: str | Path, simple_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate simple key:value format data.
-- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data (auto-detects simple or pdfcpu format).
+- `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
+- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data.
 - `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file.
 
 ### Data Classes
