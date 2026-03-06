@@ -3,7 +3,7 @@ name = "privacyforms-pdf"
 version = "0.1.0"
 description = "Python wrappers for pdfcpu to extract and fill PDF forms"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 authors = [{ name = "Andreas Jung", email = "info@zopyx.com" }]
 dependencies = ["click>=8", "pydantic>=2"]
 
@@ -19,7 +19,7 @@ dev = ["pytest>=9", "pytest-cov>=7", "ruff>=0.15", "pyright>=1.1"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -41,7 +41,7 @@ ignore = ["D100", "D104"]  # Missing docstring in public module/package
 convention = "google"
 
 [tool.pyright]
-pythonVersion = "3.14"
+pythonVersion = "3.13"
 strict = ["privacyforms_pdf"]
 typeCheckingMode = "strict"
 exclude = ["tests"]

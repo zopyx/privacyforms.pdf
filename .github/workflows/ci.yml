@@ -25,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --group dev
@@ -50,7 +50,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --group dev
@@ -65,7 +65,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.14"]
+        python-version: ["3.13", "3.13t", "3.14", "3.14t"]
 
     steps:
       - uses: actions/checkout@v4
@@ -88,6 +88,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.6.x"
+          python-version: ${{ matrix.python-version }}
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -101,7 +102,7 @@ jobs:
         run: uv run pytest -v --cov --cov-report=xml
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
