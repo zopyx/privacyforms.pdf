@@ -33,7 +33,7 @@ def create_extractor() -> PDFFormExtractor:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="pdf-forms")
+@click.version_option(version="0.1.1", prog_name="pdf-forms")
 def main() -> None:
     """PDF Form extraction and manipulation tools using pdfcpu.
 

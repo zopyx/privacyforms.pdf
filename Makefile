@@ -89,8 +89,7 @@ dev-setup: install-dev
 
 # CI/CD
 ci-build:
-	uv pip install build
-	uv run python -m build
+	uv build
 
 build: ci-build
 	@echo "Build artifacts created in dist/"
