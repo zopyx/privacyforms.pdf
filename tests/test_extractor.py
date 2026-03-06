@@ -444,6 +444,34 @@ class TestGetFieldValue:
                 value = extractor.get_field_value(test_file, "Nonexistent")
                 assert value is None
 
+    def test_get_field_value_no_match(self, tmp_path: Path) -> None:
+        """Test get_field_value returns None when fields exist but don't match."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="OtherField",
+                        value="Other",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                value = extractor.get_field_value(test_file, "Target")
+                assert value is None
+
 
 class TestGetFieldById:
     """Tests for get_field_by_id method."""
@@ -489,6 +517,34 @@ class TestGetFieldById:
                 pdf_version="v1.0",
                 has_form=True,
                 fields=[],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_id(test_file, "999")
+                assert result is None
+
+    def test_get_field_by_id_no_match(self, tmp_path: Path) -> None:
+        """Test get_field_by_id returns None when fields exist but ID doesn't match."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="123",
+                        name="TestField",
+                        value="TestValue",
+                        locked=False,
+                    )
+                ],
                 raw_data={},
             )
 
@@ -546,6 +602,34 @@ class TestGetFieldByName:
 
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 result = extractor.get_field_by_name(test_file, "Nonexistent")
+                assert result is None
+
+    def test_get_field_by_name_no_match(self, tmp_path: Path) -> None:
+        """Test get_field_by_name returns None when fields exist but name doesn't match."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="OtherName",
+                        value="Value",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_name(test_file, "Target")
                 assert result is None
 
 
