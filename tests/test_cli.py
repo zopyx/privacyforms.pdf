@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from privacyforms_pdf.cli import create_extractor, main
 from privacyforms_pdf.extractor import (
     FormField,
+    FormValidationError,
     PDFCPUExecutionError,
     PDFFormData,
     PDFFormExtractor,
@@ -236,7 +237,7 @@ class TestListFieldsCommand:
             result = runner.invoke(main, ["list-fields", str(test_file)])
             assert result.exit_code != 0
             assert "Failed to list fields" in result.output
-            assert "pdfcpu failed" in result.output
+            assert "pdfcpu failed" not in result.output
 
 
 class TestGetValueCommand:
@@ -300,7 +301,7 @@ class TestGetValueCommand:
         ):
             result = runner.invoke(main, ["get-value", str(test_file), "Field"])
             assert result.exit_code != 0
-            assert "Failed to get value" in result.output
+            assert "Failed to get field value" in result.output
 
 
 class TestInfoCommand:
@@ -347,7 +348,7 @@ class TestInfoCommand:
         ):
             result = runner.invoke(main, ["info", str(test_file)])
             assert result.exit_code != 0
-            assert "Failed to get info" in result.output
+            assert "Failed to get form info" in result.output
 
 
 class TestCreateExtractor:
@@ -697,3 +698,27 @@ class TestFillFormCommand:
             )
             assert result.exit_code != 0
             assert "does not contain a form" in result.output.lower()
+
+    def test_fill_form_form_validation_error_passthrough(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test fill-form command handles FormValidationError from extractor."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "test"}')
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "fill_form",
+                side_effect=FormValidationError("validation failed", ["bad field"]),
+            ),
+        ):
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "--no-validate"],
+            )
+            assert result.exit_code != 0
+            assert "validation failed" in result.output.lower()

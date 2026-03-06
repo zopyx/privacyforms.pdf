@@ -89,7 +89,7 @@ def extract(pdf_path: Path, output: Path | None) -> None:
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except PDFCPUExecutionError as e:
-        raise click.ClickException(f"Failed to extract form: {e.stderr or str(e)}") from e
+        raise click.ClickException("Failed to extract form.") from e
 
 
 @main.command()
@@ -132,7 +132,7 @@ def list_fields(pdf_path: Path) -> None:
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except PDFCPUExecutionError as e:
-        raise click.ClickException(f"Failed to list fields: {e.stderr or str(e)}") from e
+        raise click.ClickException("Failed to list fields.") from e
 
 
 @main.command()
@@ -160,7 +160,7 @@ def get_value(pdf_path: Path, field_name: str) -> None:
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except PDFCPUExecutionError as e:
-        raise click.ClickException(f"Failed to get value: {e.stderr or str(e)}") from e
+        raise click.ClickException("Failed to get field value.") from e
 
 
 @main.command()
@@ -182,7 +182,7 @@ def info(pdf_path: Path) -> None:
         else:
             click.echo(f"✗ {pdf_path} does not contain a form")
     except PDFCPUExecutionError as e:
-        raise click.ClickException(f"Failed to get info: {e.stderr or str(e)}") from e
+        raise click.ClickException("Failed to get form info.") from e
 
 
 @main.command("fill-form")
@@ -255,10 +255,10 @@ def fill_form(
     except FormValidationError as e:
         raise click.ClickException(str(e)) from e
     except PDFCPUExecutionError as e:
-        raise click.ClickException(f"Failed to fill form: {e.stderr or str(e)}") from e
+        raise click.ClickException("Failed to fill form.") from e
     except json.JSONDecodeError as e:
         raise click.ClickException(f"Invalid JSON file: {e}") from e
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

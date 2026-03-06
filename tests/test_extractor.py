@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -323,11 +324,17 @@ class TestExtract:
             mock_result = MagicMock()
             mock_result.returncode = 0
 
+            def mock_run(args: list[str], check: bool = True) -> MagicMock:  # noqa: ARG001
+                # Simulate pdfcpu export creating the JSON output file.
+                output_path = args[-1]
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write("{}")
+                return mock_result
+
             with (
                 patch.object(extractor, "has_form", return_value=True),
-                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch.object(extractor, "_run_command", side_effect=mock_run),
                 patch("privacyforms_pdf.extractor.json.load", return_value=mock_data),
-                patch("pathlib.Path.unlink"),
             ):
                 result = extractor.extract(test_file)
                 assert isinstance(result, PDFFormData)
@@ -594,6 +601,52 @@ class TestRunCommand:
                 pytest.raises(PDFCPUNotFoundError),
             ):
                 extractor._run_command(["version"])
+
+    def test_run_command_timeout(self) -> None:
+        """Test _run_command raises PDFCPUExecutionError on timeout."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(timeout_seconds=0.1)
+
+            with (
+                patch(
+                    "subprocess.run",
+                    side_effect=subprocess.TimeoutExpired(
+                        cmd=["/usr/bin/pdfcpu", "version"],
+                        timeout=0.1,
+                        stderr="timeout details",
+                    ),
+                ),
+                pytest.raises(PDFCPUExecutionError) as exc_info,
+            ):
+                extractor._run_command(["version"])
+
+            assert exc_info.value.returncode == -1
+            assert "timed out" in str(exc_info.value).lower()
+            assert exc_info.value.stderr == "timeout details"
+
+    def test_run_command_sanitizes_long_stderr(self) -> None:
+        """Test _run_command truncates stderr to avoid leaking excessive output."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "x" * 600
+
+            with (
+                patch("subprocess.run", return_value=mock_result),
+                pytest.raises(PDFCPUExecutionError) as exc_info,
+            ):
+                extractor._run_command(["badcommand"])
+
+            assert len(exc_info.value.stderr) == 500
+
+    def test_sanitize_stderr_none(self) -> None:
+        """Test _sanitize_stderr handles None values."""
+        assert PDFFormExtractor._sanitize_stderr(None) == ""
+
+    def test_sanitize_stderr_bytes(self) -> None:
+        """Test _sanitize_stderr decodes bytes values."""
+        assert PDFFormExtractor._sanitize_stderr(b"error bytes") == "error bytes"
 
 
 class TestExtractToJSON:

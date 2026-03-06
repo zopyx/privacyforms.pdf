@@ -6,12 +6,13 @@ import json
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
 
 class PDFCPUError(Exception):
@@ -130,12 +131,13 @@ class PDFFormExtractor:
         PDFCPUNotFoundError: If pdfcpu is not installed on the system.
     """
 
-    def __init__(self, pdfcpu_path: str | None = None) -> None:
+    def __init__(self, pdfcpu_path: str | None = None, timeout_seconds: float = 30.0) -> None:
         """Initialize the extractor.
 
         Args:
             pdfcpu_path: Optional path to the pdfcpu executable.
                         If not provided, searches in system PATH.
+            timeout_seconds: Timeout for pdfcpu command execution.
 
         Raises:
             PDFCPUNotFoundError: If pdfcpu is not found on the system.
@@ -146,6 +148,7 @@ class PDFFormExtractor:
                 "pdfcpu not found. Please install pdfcpu: https://pdfcpu.io/install"
             )
         self._pdfcpu_path: str = resolved_path
+        self._timeout_seconds: float = timeout_seconds
 
     @staticmethod
     def _find_pdfcpu() -> str | None:
@@ -180,17 +183,38 @@ class PDFFormExtractor:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=self._timeout_seconds,
             )
             if check and result.returncode != 0:
-                stderr_msg = result.stderr if result.stderr else ""
+                stderr_msg = self._sanitize_stderr(result.stderr)
                 raise PDFCPUExecutionError(
-                    f"pdfcpu command failed: {' '.join(cmd)}",
+                    "pdfcpu command failed",
                     result.returncode,
                     stderr_msg,
                 )
             return result
         except FileNotFoundError as e:
             raise PDFCPUNotFoundError(f"pdfcpu not found at {self._pdfcpu_path}") from e
+        except subprocess.TimeoutExpired as e:
+            raise PDFCPUExecutionError(
+                f"pdfcpu command timed out after {self._timeout_seconds:.1f}s",
+                -1,
+                self._sanitize_stderr(e.stderr),
+            ) from e
+
+    @staticmethod
+    def _sanitize_stderr(stderr: str | bytes | None) -> str:
+        """Return a bounded stderr string suitable for end-user messages."""
+        if stderr is None:
+            return ""
+        text = stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else stderr
+        return text.strip()[:500]
+
+    @contextmanager
+    def _temporary_json_path(self) -> Iterator[Path]:
+        """Create a temporary JSON path and ensure cleanup."""
+        with tempfile.TemporaryDirectory(prefix="privacyforms_pdf_") as tmp_dir:
+            yield Path(tmp_dir) / "form.json"
 
     def check_pdfcpu(self) -> bool:
         """Check if pdfcpu is available and working.
@@ -265,11 +289,7 @@ class PDFFormExtractor:
         if not self.has_form(pdf_path):
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
-        # Export form data to a temporary JSON file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-
-        try:
+        with self._temporary_json_path() as tmp_path:
             # Export form data using pdfcpu
             result = self._run_command(
                 ["form", "export", str(pdf_path), str(tmp_path)],
@@ -279,7 +299,7 @@ class PDFFormExtractor:
                 raise PDFCPUExecutionError(
                     f"Failed to export form data from {pdf_path}",
                     result.returncode,
-                    result.stderr,
+                    self._sanitize_stderr(result.stderr),
                 )
 
             # Read and parse the exported JSON
@@ -287,11 +307,6 @@ class PDFFormExtractor:
                 raw_data: dict[str, Any] = json.load(f)
 
             return self._parse_form_data(pdf_path, raw_data)
-
-        finally:
-            # Clean up temporary file
-            if tmp_path.exists():
-                tmp_path.unlink()
 
     def extract_to_json(self, pdf_path: str | Path, output_path: str | Path) -> None:
         """Extract form data and save it to a JSON file.
@@ -316,7 +331,7 @@ class PDFFormExtractor:
             raise PDFCPUExecutionError(
                 f"Failed to export form data from {pdf_path}",
                 result.returncode,
-                result.stderr,
+                self._sanitize_stderr(result.stderr),
             )
 
     def list_fields(self, pdf_path: str | Path) -> list[FormField]:
@@ -579,12 +594,11 @@ class PDFFormExtractor:
         # Convert simple format to pdfcpu format for the fill command
         pdfcpu_data = self._convert_to_pdfcpu_format(pdf_path, form_data)
 
-        # Write form data to temporary JSON file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-            json.dump(pdfcpu_data, tmp, indent=2)
-            tmp_path = Path(tmp.name)
+        with self._temporary_json_path() as tmp_path:
+            # Write form data to temporary JSON file
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(pdfcpu_data, f, indent=2)
 
-        try:
             # Build command arguments
             args = ["form", "fill", str(pdf_path), str(tmp_path)]
             if output_path:
@@ -596,15 +610,10 @@ class PDFFormExtractor:
                 raise PDFCPUExecutionError(
                     f"Failed to fill form in {pdf_path}",
                     result.returncode,
-                    result.stderr,
+                    self._sanitize_stderr(result.stderr),
                 )
 
             return Path(output_path) if output_path else pdf_path
-
-        finally:
-            # Clean up temporary file
-            if tmp_path.exists():
-                tmp_path.unlink()
 
     def fill_form_from_json(
         self,
