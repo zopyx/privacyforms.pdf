@@ -32,7 +32,7 @@ def create_extractor() -> PDFFormExtractor:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="privacyforms")
+@click.version_option(version="0.1.0", prog_name="pdf-forms")
 def main() -> None:
     """PDF Form extraction and manipulation tools using pdfcpu.
 
@@ -71,8 +71,8 @@ def extract(pdf_path: Path, output: Path | None) -> None:
     PDF_PATH is the path to the PDF file to process.
 
     Examples:
-        privacyforms extract form.pdf
-        privacyforms extract form.pdf -o data.json
+        pdf-forms extract form.pdf
+        pdf-forms extract form.pdf -o data.json
     """
     extractor = create_extractor()
 
@@ -99,7 +99,7 @@ def list_fields(pdf_path: Path) -> None:
     PDF_PATH is the path to the PDF file to process.
 
     Example:
-        privacyforms list-fields form.pdf
+        pdf-forms list-fields form.pdf
     """
     extractor = create_extractor()
 
@@ -144,7 +144,7 @@ def get_value(pdf_path: Path, field_name: str) -> None:
     FIELD_NAME is the name of the field to retrieve.
 
     Example:
-        privacyforms get-value form.pdf "Candidate Name"
+        pdf-forms get-value form.pdf "Candidate Name"
     """
     extractor = create_extractor()
 
@@ -170,7 +170,7 @@ def info(pdf_path: Path) -> None:
     PDF_PATH is the path to the PDF file to process.
 
     Example:
-        privacyforms info form.pdf
+        pdf-forms info form.pdf
     """
     extractor = create_extractor()
 

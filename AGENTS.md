@@ -248,7 +248,7 @@ uv lock
 ### pyproject.toml Key Sections
 
 - `[project]`: Package metadata and dependencies
-- `[project.scripts]`: CLI entry point (`privacyforms`)
+- `[project.scripts]`: CLI entry point (`pdf-forms`)
 - `[tool.ruff]`: Linting and formatting config
 - `[tool.ty]`: Type checking config
 - `[tool.pytest.ini_options]`: Test configuration
@@ -262,7 +262,7 @@ uv lock
 # Check if pdfcpu is installed
 make check-pdfcpu
 # or
-uv run privacyforms check
+uv run pdf-forms check
 ```
 
 ### Type checking errors

@@ -8,7 +8,7 @@ authors = [{ name = "Andreas Jung", email = "info@zopyx.com" }]
 dependencies = ["click>=8", "pydantic>=2"]
 
 [project.scripts]
-privacyforms = "privacyforms_pdf.cli:main"
+pdf-forms = "privacyforms_pdf.cli:main"
 
 [build-system]
 requires = ["hatchling"]

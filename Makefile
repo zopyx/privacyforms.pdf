@@ -71,11 +71,11 @@ clean:
 
 # Utility
 check-pdfcpu:
-	uv run privacyforms check
+	uv run pdf-forms check
 
 # Run CLI with arguments (e.g., make run ARGS='info samples/FilledForm.pdf')
 run:
-	uv run privacyforms $(ARGS)
+	uv run pdf-forms $(ARGS)
 
 # Development workflow
 dev-setup: install-dev

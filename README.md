@@ -36,26 +36,26 @@ uv sync
 ### Check if pdfcpu is installed
 
 ```bash
-privacyforms check
+pdf-forms check
 ```
 
 ### Command Line Usage
 
 ```bash
 # Check if a PDF contains a form
-privacyforms info form.pdf
+pdf-forms info form.pdf
 
 # List all form fields
-privacyforms list-fields form.pdf
+pdf-forms list-fields form.pdf
 
 # Get a specific field value
-privacyforms get-value form.pdf "Field Name"
+pdf-forms get-value form.pdf "Field Name"
 
 # Extract form data to JSON
-privacyforms extract form.pdf -o output.json
+pdf-forms extract form.pdf -o output.json
 
 # Extract form data to stdout
-privacyforms extract form.pdf
+pdf-forms extract form.pdf
 ```
 
 ### Python API
