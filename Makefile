@@ -96,13 +96,13 @@ ci-build:
 build: ci-build
 	@echo "Build artifacts created in dist/"
 
-upload:
+upload: check
 	@echo "Uploading to PyPI..."
-	uv publish
+	uvx twine upload dist/*
 
-upload-test:
+upload-test: check
 	@echo "Uploading to TestPyPI..."
-	uv publish --index testpypi
+	uvx twine upload --repository testpypi dist/*
 
 release: check test build
 	@git diff-index --quiet HEAD -- || (echo "Working tree is not clean. Commit or stash changes before release." && exit 1)

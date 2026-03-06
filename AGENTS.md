@@ -87,8 +87,8 @@ make check          # Run all checks (lint + format + type-check)
 make fix            # Auto-fix linting issues
 make clean          # Clean cache files
 make build          # Build package into dist/
-make upload         # Upload to PyPI
-make upload-test    # Upload to TestPyPI
+make upload         # Upload to PyPI (with twine)
+make upload-test    # Upload to TestPyPI (with twine)
 make ci-build       # Build package for CI
 ```
 
