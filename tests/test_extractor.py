@@ -790,9 +790,7 @@ class TestValidateFormData:
             form_data = {"Unknown": "value"}
 
             with patch.object(extractor, "extract", return_value=mock_form_data):
-                errors = extractor.validate_form_data(
-                    test_file, form_data, allow_extra_fields=True
-                )
+                errors = extractor.validate_form_data(test_file, form_data, allow_extra_fields=True)
                 assert errors == []
 
 

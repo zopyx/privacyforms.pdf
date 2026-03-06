@@ -513,7 +513,7 @@ class TestFillFormCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.touch()
         json_file = tmp_path / "data.json"
-        json_file.write_text('{}')
+        json_file.write_text("{}")
 
         with (
             patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
