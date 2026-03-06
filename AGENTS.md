@@ -86,6 +86,9 @@ make type-check     # Run ty type checker
 make check          # Run all checks (lint + format + type-check)
 make fix            # Auto-fix linting issues
 make clean          # Clean cache files
+make build          # Build package into dist/
+make upload         # Upload to PyPI
+make upload-test    # Upload to TestPyPI
 make ci-build       # Build package for CI
 ```
 
@@ -141,6 +144,23 @@ Tests use `unittest.mock.patch` to mock:
 ### Release Process
 
 Manual release process (CI/CD build and publish disabled):
+
+```bash
+# 1. Build package
+make build
+
+# 2. Upload to PyPI
+make upload
+
+# Or upload to TestPyPI first
+make upload-test
+```
+
+Or use the combined release target (build + tag + push):
+```bash
+make release  # Creates git tag and pushes
+make upload   # Then upload to PyPI separately
+```
 
 ## Code Conventions
 

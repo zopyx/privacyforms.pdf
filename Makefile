@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build build release
+.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build build upload upload-test release
 
 VERSION := $(shell uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 TAG ?= v$(VERSION)
@@ -20,6 +20,8 @@ help:
 	@echo "  check-pdfcpu - Check if pdfcpu is installed"
 	@echo "  run          - Run the CLI (use ARGS='<args>')"
 	@echo "  build        - Build package artifacts into dist/"
+	@echo "  upload       - Upload built package to PyPI"
+	@echo "  upload-test  - Upload built package to TestPyPI"
 	@echo "  release      - Run checks/tests, build, tag, and push release"
 	@echo "  ci-build     - Build package for CI/CD (no pdfcpu required)"
 	@echo "  ci           - Run all CI checks (check + test + build)"
@@ -94,6 +96,14 @@ ci-build:
 build: ci-build
 	@echo "Build artifacts created in dist/"
 
+upload:
+	@echo "Uploading to PyPI..."
+	uv publish
+
+upload-test:
+	@echo "Uploading to TestPyPI..."
+	uv publish --index testpypi
+
 release: check test build
 	@git diff-index --quiet HEAD -- || (echo "Working tree is not clean. Commit or stash changes before release." && exit 1)
 	@git rev-parse "$(TAG)" >/dev/null 2>&1 && (echo "Tag $(TAG) already exists." && exit 1) || true
@@ -101,6 +111,7 @@ release: check test build
 	git push origin master
 	git push origin "$(TAG)"
 	@echo "Release $(TAG) created and pushed."
+	@echo "Run 'make upload' to publish to PyPI."
 
 ci: check test ci-build
 	@echo "CI checks passed!"
