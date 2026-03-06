@@ -131,24 +131,16 @@ Tests use `unittest.mock.patch` to mock:
 | Workflow | File | Trigger |
 |----------|------|---------|
 | CI | `.github/workflows/ci.yml` | Push/PR to main/master |
-| Release | `.github/workflows/release.yml` | Tag push `v*` |
 
 ### CI Jobs
 
 1. **Lint & Format**: Ruff checks
-2. **Type Check**: Pyright strict mode
-3. **Test**: Multi-platform (Ubuntu, macOS, Windows) with Python 3.14
-4. **Build**: Package build verification
+2. **Type Check**: ty strict mode
+3. **Test**: Multi-platform (Ubuntu, macOS) with Python 3.13, 3.13t, 3.14, 3.14t
 
 ### Release Process
 
-1. Update version in `pyproject.toml`
-2. Create git tag: `git tag v0.1.1`
-3. Push tag: `git push origin v0.1.1`
-4. GitHub Actions will:
-   - Build package
-   - Publish to PyPI
-   - Create GitHub release
+Manual release process (CI/CD build and publish disabled):
 
 ## Code Conventions
 
