@@ -9,6 +9,7 @@ import pytest
 
 from privacyforms_pdf.extractor import (
     FormField,
+    FormValidationError,
     PDFCPUError,
     PDFCPUExecutionError,
     PDFCPUNotFoundError,
@@ -331,6 +332,27 @@ class TestExtract:
                 result = extractor.extract(test_file)
                 assert isinstance(result, PDFFormData)
 
+    def test_extract_export_failure(self, tmp_path: Path) -> None:
+        """Test extract raises PDFCPUExecutionError when export fails."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Export command failed"
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch("pathlib.Path.unlink"),
+                pytest.raises(PDFCPUExecutionError) as exc_info,
+            ):
+                extractor.extract(test_file)
+
+            assert "Export command failed" in exc_info.value.stderr
+
 
 class TestListFields:
     """Tests for list_fields method."""
@@ -414,6 +436,110 @@ class TestGetFieldValue:
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 value = extractor.get_field_value(test_file, "Nonexistent")
                 assert value is None
+
+
+class TestGetFieldById:
+    """Tests for get_field_by_id method."""
+
+    def test_get_field_by_id_success(self, tmp_path: Path) -> None:
+        """Test get_field_by_id returns field for existing ID."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_field = FormField(
+                field_type="textfield",
+                pages=[1],
+                id="123",
+                name="TestField",
+                value="TestValue",
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_id(test_file, "123")
+                assert result is not None
+                assert result.id == "123"
+                assert result.name == "TestField"
+
+    def test_get_field_by_id_not_found(self, tmp_path: Path) -> None:
+        """Test get_field_by_id returns None for nonexistent ID."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_id(test_file, "999")
+                assert result is None
+
+
+class TestGetFieldByName:
+    """Tests for get_field_by_name method."""
+
+    def test_get_field_by_name_success(self, tmp_path: Path) -> None:
+        """Test get_field_by_name returns field for existing name."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_field = FormField(
+                field_type="textfield",
+                pages=[1],
+                id="123",
+                name="TestField",
+                value="TestValue",
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_name(test_file, "TestField")
+                assert result is not None
+                assert result.name == "TestField"
+                assert result.id == "123"
+
+    def test_get_field_by_name_not_found(self, tmp_path: Path) -> None:
+        """Test get_field_by_name returns None for nonexistent name."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor.get_field_by_name(test_file, "Nonexistent")
+                assert result is None
 
 
 class TestRunCommand:
@@ -505,3 +631,627 @@ class TestExtractToJSON:
                 pytest.raises(PDFCPUExecutionError),
             ):
                 extractor.extract_to_json(test_file, output_file)
+
+
+class TestValidateFormData:
+    """Tests for validate_form_data method."""
+
+    def test_validate_empty_data(self, tmp_path: Path) -> None:
+        """Test validation with empty form data."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="Field1",
+                        value="",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                # Empty form data (no forms key) should be valid
+                errors = extractor.validate_form_data(test_file, {})
+                assert errors == []
+
+    def test_validate_field_not_found(self, tmp_path: Path) -> None:
+        """Test validation catches field not in form."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="Existing",
+                        value="",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"id": "999", "name": "Nonexistent", "value": "test"}
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                assert len(errors) == 1
+                assert "Nonexistent" in errors[0]
+
+    def test_validate_checkbox_type_error(self, tmp_path: Path) -> None:
+        """Test validation catches checkbox type mismatch."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="checkbox",
+                        pages=[1],
+                        id="1",
+                        name="Agree",
+                        value=False,
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            form_data = {
+                "forms": [
+                    {
+                        "checkbox": [
+                            {"id": "1", "name": "Agree", "value": "yes"}  # String, not bool
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                assert len(errors) == 1
+                assert "boolean" in errors[0].lower()
+
+    def test_validate_strict_mode_missing_field(self, tmp_path: Path) -> None:
+        """Test strict mode catches missing fields."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="Required",
+                        value="",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            form_data = {"forms": [{"textfield": []}]}
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data, strict=True)
+                assert len(errors) == 1
+                assert "Required" in errors[0]
+
+    def test_validate_no_form(self, tmp_path: Path) -> None:
+        """Test validation when PDF has no form."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            with (
+                patch.object(extractor, "extract", side_effect=PDFFormNotFoundError("No form")),
+            ):
+                errors = extractor.validate_form_data(test_file, {})
+                assert len(errors) == 1
+                assert "does not contain a form" in errors[0]
+
+    def test_validate_allow_extra_fields(self, tmp_path: Path) -> None:
+        """Test validation with allow_extra_fields=True."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"id": "999", "name": "Nonexistent", "value": "test"}
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                # With allow_extra_fields=True, no errors should be reported
+                errors = extractor.validate_form_data(
+                    test_file, form_data, allow_extra_fields=True
+                )
+                assert errors == []
+
+    def test_validate_field_without_name(self, tmp_path: Path) -> None:
+        """Test validation error for field with only id (no name)."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            # Field with only id, no name
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"id": "999", "value": "test"}  # No name field
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                assert len(errors) == 1
+                assert "999" in errors[0]
+                assert "id" in errors[0].lower()
+
+    def test_validate_field_with_both_id_and_name(self, tmp_path: Path) -> None:
+        """Test validation error includes both id and name when both exist."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            # Field with both id and name
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"id": "999", "name": "MissingField", "value": "test"}
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                assert len(errors) == 1
+                assert "MissingField" in errors[0]
+                assert "999" in errors[0]
+
+    def test_validate_field_name_only_not_found(self, tmp_path: Path) -> None:
+        """Test validation error when field with only name is not found."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            # Field with only name (no id)
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"name": "OnlyNameField", "value": "test"}  # No id
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                assert len(errors) == 1
+                assert "OnlyNameField" in errors[0]
+                # Should not contain "id" since we only have name
+                assert "id:" not in errors[0].lower() or "(id:" not in errors[0]
+
+    def test_validate_field_without_id_or_name(self, tmp_path: Path) -> None:
+        """Test validation skips field with neither id nor name."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            # Field with neither id nor name - should be skipped
+            form_data = {
+                "forms": [
+                    {
+                        "textfield": [
+                            {"value": "test"}  # No id, no name
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                # No errors because field without id/name is skipped
+                assert errors == []
+
+    def test_validate_multiple_fields_continue_after_error(self, tmp_path: Path) -> None:
+        """Test validation continues checking fields after finding an error."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="checkbox",
+                        pages=[1],
+                        id="1",
+                        name="Check1",
+                        value=False,
+                        locked=False,
+                    ),
+                    FormField(
+                        field_type="checkbox",
+                        pages=[1],
+                        id="2",
+                        name="Check2",
+                        value=False,
+                        locked=False,
+                    ),
+                ],
+                raw_data={},
+            )
+
+            # Both fields have wrong type (string instead of bool)
+            form_data = {
+                "forms": [
+                    {
+                        "checkbox": [
+                            {"id": "1", "name": "Check1", "value": "yes"},
+                            {"id": "2", "name": "Check2", "value": "no"},
+                        ]
+                    }
+                ]
+            }
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                errors = extractor.validate_form_data(test_file, form_data)
+                # Should have errors for both fields
+                assert len(errors) == 2
+                assert "Check1" in errors[0]
+                assert "Check2" in errors[1]
+
+
+class TestFillForm:
+    """Tests for fill_form method."""
+
+    def test_fill_form_no_form(self, tmp_path: Path) -> None:
+        """Test fill_form raises when PDF has no form."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            with (
+                patch.object(extractor, "has_form", return_value=False),
+                pytest.raises(PDFFormNotFoundError),
+            ):
+                extractor.fill_form(test_file, {})
+
+    def test_fill_form_validation_raises(self, tmp_path: Path) -> None:
+        """Test fill_form raises FormValidationError with validate=True."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+            ):
+                # Invalid field should raise FormValidationError
+                form_data = {
+                    "forms": [{"textfield": [{"id": "999", "name": "Bad", "value": "x"}]}]
+                }
+
+                with pytest.raises(FormValidationError) as exc_info:
+                    extractor.fill_form(test_file, form_data, validate=True)
+
+                assert "validation failed" in str(exc_info.value).lower()
+                assert len(exc_info.value.errors) > 0
+
+    def test_fill_form_validation_error(self, tmp_path: Path) -> None:
+        """Test fill_form raises on validation error."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+            ):
+                # Provide form data with nonexistent field
+                form_data = {
+                    "forms": [{"textfield": [{"id": "999", "name": "Bad", "value": "x"}]}]
+                }
+
+                with pytest.raises(FormValidationError):
+                    extractor.fill_form(test_file, form_data)
+
+    def test_fill_form_success(self, tmp_path: Path) -> None:
+        """Test fill_form succeeds with valid data."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+            output_file = tmp_path / "output.pdf"
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="Name",
+                        value="",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch("privacyforms_pdf.extractor.json.dump"),
+                patch("pathlib.Path.unlink"),
+            ):
+                form_data = {
+                    "forms": [{"textfield": [{"id": "1", "name": "Name", "value": "John"}]}]
+                }
+                result = extractor.fill_form(test_file, form_data, output_file)
+                assert result == output_file
+
+    def test_fill_form_skip_validation(self, tmp_path: Path) -> None:
+        """Test fill_form can skip validation."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch("privacyforms_pdf.extractor.json.dump"),
+                patch("pathlib.Path.unlink"),
+            ):
+                # Invalid data but validation is skipped
+                form_data = {"forms": [{"textfield": [{"id": "999", "value": "test"}]}]}
+                result = extractor.fill_form(test_file, form_data, validate=False)
+                assert result == test_file  # No output path, returns input path
+
+    def test_fill_form_execution_error(self, tmp_path: Path) -> None:
+        """Test fill_form raises PDFCPUExecutionError when command fails."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[
+                    FormField(
+                        field_type="textfield",
+                        pages=[1],
+                        id="1",
+                        name="Name",
+                        value="",
+                        locked=False,
+                    )
+                ],
+                raw_data={},
+            )
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Fill command failed"
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch("privacyforms_pdf.extractor.json.dump"),
+                patch("pathlib.Path.unlink"),
+                pytest.raises(PDFCPUExecutionError) as exc_info,
+            ):
+                form_data = {
+                    "forms": [{"textfield": [{"id": "1", "name": "Name", "value": "John"}]}]
+                }
+                extractor.fill_form(test_file, form_data)
+
+            assert "Fill command failed" in exc_info.value.stderr
+
+
+class TestFillFormFromJSON:
+    """Tests for fill_form_from_json method."""
+
+    def test_fill_from_json_file_not_found(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json raises when JSON not found."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            pdf_file = tmp_path / "test.pdf"
+            pdf_file.touch()
+            json_file = tmp_path / "nonexistent.json"
+
+            with pytest.raises(FileNotFoundError):
+                extractor.fill_form_from_json(pdf_file, json_file)
+
+    def test_fill_from_json_success(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json succeeds."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            pdf_file = tmp_path / "test.pdf"
+            pdf_file.touch()
+            json_file = tmp_path / "data.json"
+            output_file = tmp_path / "output.pdf"
+
+            # Write valid JSON
+            json_file.write_text('{"forms": []}')
+
+            mock_form_data = PDFFormData(
+                source=pdf_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[],
+                raw_data={},
+            )
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch("pathlib.Path.unlink"),
+            ):
+                result = extractor.fill_form_from_json(pdf_file, json_file, output_file)
+                assert result == output_file
+
+    def test_fill_from_json_directory(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json raises when JSON path is directory."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            pdf_file = tmp_path / "test.pdf"
+            pdf_file.touch()
+            json_dir = tmp_path / "jsondir"
+            json_dir.mkdir()
+
+            with pytest.raises(FileNotFoundError) as exc_info:
+                extractor.fill_form_from_json(pdf_file, json_dir)
+
+            assert "not a file" in str(exc_info.value).lower()
+
+
+class TestFormValidationError:
+    """Tests for FormValidationError."""
+
+    def test_error_message_without_errors(self) -> None:
+        """Test error message without detailed errors."""
+        err = FormValidationError("Validation failed")
+        assert str(err) == "Validation failed"
+        assert err.errors == []
+
+    def test_error_message_with_errors(self) -> None:
+        """Test error message with detailed errors."""
+        err = FormValidationError("Validation failed", ["Error 1", "Error 2"])
+        assert "Validation failed" in str(err)
+        assert "Error 1" in str(err)
+        assert "Error 2" in str(err)

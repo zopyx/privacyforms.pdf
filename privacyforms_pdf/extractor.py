@@ -48,6 +48,32 @@ class PDFFormNotFoundError(PDFCPUError):
     pass
 
 
+class FormValidationError(PDFCPUError):
+    """Raised when form data validation fails."""
+
+    def __init__(self, message: str, errors: list[str] | None = None) -> None:
+        """Initialize the error with validation details.
+
+        Args:
+            message: Error message.
+            errors: List of specific validation errors.
+        """
+        super().__init__(message)
+        self.message = message
+        self.errors = errors or []
+
+    def __str__(self) -> str:  # noqa: D105
+        if self.errors:
+            return f"{self.message}\n- " + "\n- ".join(self.errors)
+        return self.message
+
+
+class FieldNotFoundError(PDFCPUError):
+    """Raised when a field is not found in the form."""
+
+    pass
+
+
 @dataclass(frozen=True)
 class FormField:
     """Represents a single form field.
@@ -328,6 +354,273 @@ class PDFFormExtractor:
             if field.name == field_name:
                 return field.value
         return None
+
+    def get_field_by_id(self, pdf_path: str | Path, field_id: str) -> FormField | None:
+        """Get a form field by its ID.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            field_id: ID of the field to retrieve.
+
+        Returns:
+            The FormField object, or None if the field is not found.
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
+        """
+        fields = self.list_fields(pdf_path)
+        for field in fields:
+            if field.id == field_id:
+                return field
+        return None
+
+    def get_field_by_name(self, pdf_path: str | Path, field_name: str) -> FormField | None:
+        """Get a form field by its name.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            field_name: Name of the field to retrieve.
+
+        Returns:
+            The FormField object, or None if the field is not found.
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
+        """
+        fields = self.list_fields(pdf_path)
+        for field in fields:
+            if field.name == field_name:
+                return field
+        return None
+
+    def validate_form_data(
+        self,
+        pdf_path: str | Path,
+        form_data: dict[str, Any],
+        *,
+        strict: bool = False,
+        allow_extra_fields: bool = False,
+    ) -> list[str]:
+        """Validate form data against PDF form fields.
+
+        This method validates that the provided form data matches the structure
+        and field types of the PDF form. It checks:
+        - All referenced fields exist in the form
+        - Field value types match expected types
+        - Required fields have values (when strict=True)
+
+        Args:
+            pdf_path: Path to the PDF file.
+            form_data: The form data to validate (must match export format).
+            strict: If True, also checks that all form fields are provided.
+            allow_extra_fields: If True, allows fields not present in the form.
+
+        Returns:
+            List of validation error messages (empty if valid).
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
+        """
+        pdf_path = Path(pdf_path)
+        self._validate_pdf_path(pdf_path)
+
+        errors: list[str] = []
+
+        # Get the form fields from the PDF
+        try:
+            form_data_obj = self.extract(pdf_path)
+        except PDFFormNotFoundError:
+            return ["PDF does not contain a form"]
+
+        # Build lookup maps
+        fields_by_id = {f.id: f for f in form_data_obj.fields}
+        fields_by_name = {f.name: f for f in form_data_obj.fields}
+
+        # Extract fields from input data
+        input_fields: dict[str, dict[str, Any]] = {}
+        forms = form_data.get("forms", [])
+        if forms and isinstance(forms, list):
+            form = forms[0]
+            field_types = [
+                "textfield",
+                "datefield",
+                "checkbox",
+                "radiobuttongroup",
+                "combobox",
+                "listbox",
+            ]
+            for field_type in field_types:
+                for field in form.get(field_type, []):
+                    field_id = field.get("id")
+                    field_name = field.get("name")
+                    key = field_id or field_name
+                    if key:
+                        input_fields[key] = {
+                            "type": field_type,
+                            "id": field_id,
+                            "name": field_name,
+                            "value": field.get("value"),
+                            "locked": field.get("locked"),
+                        }
+
+        # Validate each input field exists in form
+        if not allow_extra_fields:
+            for key, field_info in input_fields.items():
+                if key not in fields_by_id and key not in fields_by_name:
+                    field_name = field_info.get("name")
+                    field_id = field_info.get("id")
+                    if field_name and field_id:
+                        errors.append(
+                            f"Field not found in form: '{field_name}' (id: {field_id})"
+                        )
+                    elif field_name:
+                        errors.append(f"Field not found in form: '{field_name}'")
+                    else:
+                        errors.append(f"Field not found in form: id '{field_id}'")
+                    continue
+
+                # Validate value type matches field type
+                pdf_field = fields_by_id.get(key) or fields_by_name.get(key)
+                if pdf_field:
+                    value = field_info["value"]
+                    if pdf_field.field_type == "checkbox" and not isinstance(value, bool):
+                        field_label = field_info.get("name") or key
+                        errors.append(
+                            f"Field '{field_label}': checkbox value must be boolean, "
+                            f"got {type(value).__name__}"
+                        )
+
+        # In strict mode, check all form fields are provided
+        if strict:
+            provided_keys = set(input_fields.keys())
+            for field in form_data_obj.fields:
+                if field.id not in provided_keys and field.name not in provided_keys:
+                    errors.append(f"Required field not provided: '{field.name}' (id: {field.id})")
+
+        return errors
+
+    def fill_form(
+        self,
+        pdf_path: str | Path,
+        form_data: dict[str, Any],
+        output_path: str | Path | None = None,
+        *,
+        validate: bool = True,
+    ) -> Path:
+        """Fill a PDF form with data from a JSON structure.
+
+        This method fills form fields using data from a JSON structure matching
+        the format produced by the export operation. Fields can be identified
+        by either "id" or "name".
+
+        Args:
+            pdf_path: Path to the PDF file containing the form.
+            form_data: The form data to fill (must match export format).
+            output_path: Optional output path. If not provided, the input PDF
+                        is modified in place (pdfcpu default behavior).
+            validate: If True, validates form data before filling.
+
+        Returns:
+            Path to the filled PDF (output_path or pdf_path if no output specified).
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+            FormValidationError: If validation fails and validate=True.
+            PDFCPUExecutionError: If pdfcpu fails to fill the form.
+            PDFFormNotFoundError: If the PDF does not contain a form.
+
+        Example:
+            >>> form_data = {
+            ...     "forms": [{
+            ...         "textfield": [
+            ...             {"name": "firstName", "value": "John", "locked": False}
+            ...         ]
+            ...     }]
+            ... }
+            >>> extractor.fill_form("form.pdf", form_data, "filled.pdf")
+        """
+        pdf_path = Path(pdf_path)
+        self._validate_pdf_path(pdf_path)
+
+        # Check if PDF has a form
+        if not self.has_form(pdf_path):
+            raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
+
+        # Validate form data if requested
+        if validate:
+            errors = self.validate_form_data(pdf_path, form_data)
+            if errors:
+                raise FormValidationError("Form data validation failed", errors)
+
+        # Write form data to temporary JSON file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
+            json.dump(form_data, tmp, indent=2)
+            tmp_path = Path(tmp.name)
+
+        try:
+            # Build command arguments
+            args = ["form", "fill", str(pdf_path), str(tmp_path)]
+            if output_path:
+                args.append(str(output_path))
+
+            # Execute fill command
+            result = self._run_command(args, check=False)
+            if result.returncode != 0:
+                raise PDFCPUExecutionError(
+                    f"Failed to fill form in {pdf_path}",
+                    result.returncode,
+                    result.stderr,
+                )
+
+            return Path(output_path) if output_path else pdf_path
+
+        finally:
+            # Clean up temporary file
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def fill_form_from_json(
+        self,
+        pdf_path: str | Path,
+        json_path: str | Path,
+        output_path: str | Path | None = None,
+        *,
+        validate: bool = True,
+    ) -> Path:
+        """Fill a PDF form with data from a JSON file.
+
+        Args:
+            pdf_path: Path to the PDF file containing the form.
+            json_path: Path to the JSON file with form data.
+            output_path: Optional output path. If not provided, the input PDF
+                        is modified in place.
+            validate: If True, validates form data before filling.
+
+        Returns:
+            Path to the filled PDF.
+
+        Raises:
+            FileNotFoundError: If any file does not exist.
+            FormValidationError: If validation fails and validate=True.
+            PDFCPUExecutionError: If pdfcpu fails to fill the form.
+        """
+        pdf_path = Path(pdf_path)
+        json_path = Path(json_path)
+
+        self._validate_pdf_path(pdf_path)
+        if not json_path.exists():
+            raise FileNotFoundError(f"JSON file not found: {json_path}")
+        if not json_path.is_file():
+            raise FileNotFoundError(f"Path is not a file: {json_path}")
+
+        # Read and parse JSON
+        with open(json_path, encoding="utf-8") as f:
+            form_data: dict[str, Any] = json.load(f)
+
+        return self.fill_form(pdf_path, form_data, output_path, validate=validate)
 
     def _validate_pdf_path(self, pdf_path: Path) -> None:
         """Validate that the PDF path exists and is a file.

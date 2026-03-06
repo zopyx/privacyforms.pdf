@@ -53,7 +53,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=privacyforms_pdf --cov-report=term-missing --cov-report=html --cov-fail-under=90"
+addopts = "--cov=privacyforms_pdf --cov-report=term-missing --cov-report=html --cov-fail-under=98"
 
 [tool.coverage.run]
 source = ["privacyforms_pdf"]

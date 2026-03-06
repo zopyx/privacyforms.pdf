@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
@@ -296,7 +296,314 @@ class TestCLIEdgeCases:
         result = runner.invoke(main, ["list-fields", "/nonexistent/file.pdf"])
         assert result.exit_code != 0
 
+    def test_list_fields_no_form_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command handles PDFFormNotFoundError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "list_fields",
+                side_effect=PDFFormNotFoundError("No form"),
+            ),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code != 0
+            assert "No form" in result.output
+
+    def test_list_fields_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command handles PDFCPUExecutionError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "list_fields",
+                side_effect=PDFCPUExecutionError("Error", 1, "pdfcpu failed"),
+            ),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code != 0
+            assert "Failed to list fields" in result.output
+            assert "pdfcpu failed" in result.output
+
+    def test_get_value_no_form_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test get-value command handles PDFFormNotFoundError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "get_field_value",
+                side_effect=PDFFormNotFoundError("No form"),
+            ),
+        ):
+            result = runner.invoke(main, ["get-value", str(test_file), "Field"])
+            assert result.exit_code != 0
+            assert "No form" in result.output
+
+    def test_get_value_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test get-value command handles PDFCPUExecutionError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "get_field_value",
+                side_effect=PDFCPUExecutionError("Error", 1, "pdfcpu failed"),
+            ),
+        ):
+            result = runner.invoke(main, ["get-value", str(test_file), "Field"])
+            assert result.exit_code != 0
+            assert "Failed to get value" in result.output
+
     def test_info_nonexistent_file(self, runner: CliRunner) -> None:
         """Test info command with nonexistent file."""
         result = runner.invoke(main, ["info", "/nonexistent/file.pdf"])
         assert result.exit_code != 0
+
+    def test_info_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test info command handles PDFCPUExecutionError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                PDFFormExtractor,
+                "has_form",
+                side_effect=PDFCPUExecutionError("Error", 1, "pdfcpu error"),
+            ),
+        ):
+            result = runner.invoke(main, ["info", str(test_file)])
+            assert result.exit_code != 0
+            assert "Failed to get info" in result.output
+
+
+class TestFillFormCommand:
+    """Tests for the fill-form command."""
+
+    def test_fill_form_success(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command succeeds with valid data."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": []}')
+        output_file = tmp_path / "output.pdf"
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "_run_command") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "-o", str(output_file)],
+            )
+            assert result.exit_code == 0
+            assert "validation passed" in result.output.lower()
+            assert "saved to" in result.output.lower()
+
+    def test_fill_form_validation_failure(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command fails on validation error."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text(
+            '{"forms": [{"textfield": [{"id": "999", "name": "Bad", "value": "x"}]}]}'
+        )
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code != 0
+            assert "validation" in result.output.lower() or "validation" in result.stderr.lower()
+
+    def test_fill_form_no_validate(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with --no-validate flag."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": [{"textfield": [{"id": "1", "value": "test"}]}]}')
+        output_file = tmp_path / "output.pdf"
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "_run_command") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(
+                main,
+                [
+                    "fill-form",
+                    str(pdf_file),
+                    str(json_file),
+                    "-o",
+                    str(output_file),
+                    "--no-validate",
+                ],
+            )
+            assert result.exit_code == 0
+            # Should not show validation message
+            assert "validation passed" not in result.output.lower()
+
+    def test_fill_form_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command when PDF has no form."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{}')
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=False),
+        ):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code != 0
+            assert "does not contain a form" in result.output.lower()
+
+    def test_fill_form_invalid_json(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with invalid JSON."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text("not valid json")
+
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code != 0
+            assert "invalid json" in result.output.lower()
+
+    def test_fill_form_in_place(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command without output path (modifies in place)."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": []}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "_run_command") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code == 0
+            assert str(pdf_file) in result.output
+
+    def test_fill_form_strict_mode(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with --strict flag."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": []}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                FormField(
+                    field_type="textfield",
+                    pages=[1],
+                    id="1",
+                    name="Required",
+                    value="",
+                    locked=False,
+                )
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file), "--strict"])
+            assert result.exit_code != 0
+            assert "required" in result.output.lower() or "missing" in result.output.lower()
+
+    def test_fill_form_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command handles PDFCPUExecutionError."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": []}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(
+                PDFFormExtractor,
+                "_run_command",
+                side_effect=PDFCPUExecutionError("Error", 1, "fill failed"),
+            ),
+        ):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code != 0
+            assert "Failed to fill form" in result.output
+
+    def test_fill_form_no_validate_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form handles PDFFormNotFoundError when validation is skipped."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"forms": []}')
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=False),
+        ):
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "--no-validate"],
+            )
+            assert result.exit_code != 0
+            assert "does not contain a form" in result.output.lower()

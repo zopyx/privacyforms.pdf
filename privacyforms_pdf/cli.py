@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 
 from .extractor import (
+    FormValidationError,
     PDFCPUError,
     PDFCPUExecutionError,
     PDFFormExtractor,
@@ -182,6 +183,81 @@ def info(pdf_path: Path) -> None:
             click.echo(f"✗ {pdf_path} does not contain a form")
     except PDFCPUExecutionError as e:
         raise click.ClickException(f"Failed to get info: {e.stderr or str(e)}") from e
+
+
+@main.command("fill-form")
+@click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
+@click.argument("json_path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output PDF file path (modifies input if not provided)",
+)
+@click.option(
+    "--validate/--no-validate",
+    default=True,
+    help="Validate JSON data against form fields before filling (default: validate)",
+)
+@click.option(
+    "--strict/--no-strict",
+    default=False,
+    help="Require all form fields to be provided (default: not strict)",
+)
+def fill_form(
+    pdf_path: Path, json_path: Path, output: Path | None, validate: bool, strict: bool
+) -> None:
+    """Fill a PDF form with data from a JSON file.
+
+    PDF_PATH is the path to the PDF form file.
+    JSON_PATH is the path to the JSON file with form data.
+
+    The JSON file should match the format produced by the 'extract' command.
+    Only fields to be filled need to be included - others will remain unchanged.
+
+    Examples:
+        pdf-forms fill-form form.pdf data.json
+        pdf-forms fill-form form.pdf data.json -o filled.pdf
+        pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
+        pdf-forms fill-form form.pdf data.json --no-validate
+    """
+    extractor = create_extractor()
+
+    try:
+        # First, validate if requested
+        if validate:
+            with open(json_path, encoding="utf-8") as f:
+                form_data = json.load(f)
+
+            errors = extractor.validate_form_data(
+                pdf_path, form_data, strict=strict, allow_extra_fields=False
+            )
+            if errors:
+                click.echo("Validation errors:", err=True)
+                for error in errors:
+                    click.echo(f"  - {error}", err=True)
+                raise click.ClickException("Form validation failed")
+
+            click.echo("✓ Form data validation passed")
+
+        # Fill the form
+        extractor.fill_form_from_json(
+            pdf_path, json_path, output, validate=False  # Already validated above
+        )
+
+        if output:
+            click.echo(f"✓ Form filled and saved to: {output}")
+        else:
+            click.echo(f"✓ Form filled: {pdf_path}")
+
+    except PDFFormNotFoundError as e:
+        raise click.ClickException(str(e)) from e
+    except FormValidationError as e:
+        raise click.ClickException(str(e)) from e
+    except PDFCPUExecutionError as e:
+        raise click.ClickException(f"Failed to fill form: {e.stderr or str(e)}") from e
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON file: {e}") from e
 
 
 if __name__ == "__main__":

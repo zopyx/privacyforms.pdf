@@ -56,6 +56,18 @@ pdf-forms extract form.pdf -o output.json
 
 # Extract form data to stdout
 pdf-forms extract form.pdf
+
+# Fill a form from JSON (validates data before filling)
+pdf-forms fill-form form.pdf data.json -o filled.pdf
+
+# Fill a form without validation
+pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
+
+# Fill a form in-place (modifies original)
+pdf-forms fill-form form.pdf data.json
+
+# Fill with strict mode (requires all form fields)
+pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
 ```
 
 ### Python API
@@ -86,6 +98,27 @@ has_form = extractor.has_form("form.pdf")
 
 # Export to JSON file
 extractor.extract_to_json("form.pdf", "output.json")
+
+# Fill a form from JSON data
+form_data = {
+    "forms": [{
+        "textfield": [
+            {"name": "firstName", "value": "John", "locked": False}
+        ],
+        "checkbox": [
+            {"id": "agree", "value": True, "locked": True}
+        ]
+    }]
+}
+extractor.fill_form("form.pdf", form_data, "filled.pdf")
+
+# Or fill from a JSON file
+extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
+
+# Validate data before filling (returns list of errors)
+errors = extractor.validate_form_data("form.pdf", form_data)
+if errors:
+    print("Validation errors:", errors)
 ```
 
 ## API Reference
@@ -111,6 +144,11 @@ extractor = PDFFormExtractor(pdfcpu_path: str | None = None)
 - `extract_to_json(pdf_path: str | Path, output_path: str | Path) -> None`: Export form data to a JSON file.
 - `list_fields(pdf_path: str | Path) -> list[FormField]`: List all form fields in a PDF.
 - `get_field_value(pdf_path: str | Path, field_name: str) -> str | bool | None`: Get the value of a specific form field.
+- `get_field_by_id(pdf_path: str | Path, field_id: str) -> FormField | None`: Get a form field by its ID.
+- `get_field_by_name(pdf_path: str | Path, field_name: str) -> FormField | None`: Get a form field by its name.
+- `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate JSON data against form fields.
+- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON structure.
+- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file.
 
 ### Data Classes
 
@@ -141,6 +179,7 @@ Represents a single form field.
 - `PDFCPUNotFoundError`: Raised when pdfcpu is not found on the system.
 - `PDFCPUExecutionError`: Raised when pdfcpu execution fails.
 - `PDFFormNotFoundError`: Raised when the PDF does not contain any forms.
+- `FormValidationError`: Raised when form data validation fails.
 
 ## Development
 
