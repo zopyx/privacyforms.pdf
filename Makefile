@@ -1,0 +1,91 @@
+.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build
+
+# Default target
+help:
+	@echo "Available targets:"
+	@echo "  install      - Install project dependencies"
+	@echo "  install-dev  - Install development dependencies"
+	@echo "  test         - Run tests"
+	@echo "  test-cov     - Run tests with coverage report"
+	@echo "  lint         - Run linter (ruff check)"
+	@echo "  format       - Format code (ruff format)"
+	@echo "  format-check - Check code formatting"
+	@echo "  type-check   - Run type checker (pyright)"
+	@echo "  check        - Run all checks (lint, format-check, type-check)"
+	@echo "  fix          - Fix auto-fixable issues (ruff check --fix)"
+	@echo "  clean        - Clean build artifacts and cache files"
+	@echo "  check-pdfcpu - Check if pdfcpu is installed"
+	@echo "  run          - Run the CLI (use ARGS='<args>')"
+	@echo "  ci-build     - Build package for CI/CD (no pdfcpu required)"
+	@echo "  ci           - Run all CI checks (check + test + build)"
+
+# Installation
+install:
+	uv sync
+
+install-dev:
+	uv sync --group dev
+
+# Testing
+test:
+	uv run pytest -v
+
+test-cov:
+	uv run pytest --cov --cov-report=term-missing
+
+test-cov-html:
+	uv run pytest --cov --cov-report=html
+	@echo "HTML coverage report: htmlcov/index.html"
+
+# Code quality
+lint:
+	uv run ruff check privacyforms_pdf tests
+
+format:
+	uv run ruff format privacyforms_pdf tests
+
+format-check:
+	uv run ruff format --check privacyforms_pdf tests
+
+type-check:
+	uv run pyright privacyforms_pdf
+
+check: lint format-check type-check
+	@echo "All checks passed!"
+
+fix:
+	uv run ruff check --fix privacyforms_pdf tests
+
+# Cleaning
+clean:
+	rm -rf build/
+	rm -rf dist/
+	rm -rf *.egg-info/
+	rm -rf htmlcov/
+	rm -rf .coverage
+	rm -rf .pytest_cache/
+	rm -rf .mypy_cache/
+	rm -rf .ruff_cache/
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+# Utility
+check-pdfcpu:
+	uv run privacyforms check
+
+# Run CLI with arguments (e.g., make run ARGS='info samples/FilledForm.pdf')
+run:
+	uv run privacyforms $(ARGS)
+
+# Development workflow
+dev-setup: install-dev
+	@echo "Development environment ready!"
+	@echo "Run 'make check' to verify everything is working"
+
+# CI/CD
+ci-build:
+	uv pip install build
+	uv run python -m build
+
+ci: check test ci-build
+	@echo "CI checks passed!"

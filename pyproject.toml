@@ -1,0 +1,62 @@
+[project]
+name = "privacyforms-pdf"
+version = "0.1.0"
+description = "Python wrappers for pdfcpu to extract and fill PDF forms"
+readme = "README.md"
+requires-python = ">=3.14"
+authors = [{ name = "Andreas Jung", email = "info@zopyx.com" }]
+dependencies = ["click>=8", "pydantic>=2"]
+
+[project.scripts]
+privacyforms = "privacyforms_pdf.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-cov>=7", "ruff>=0.15", "pyright>=1.1"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = ["D100", "D104"]  # Missing docstring in public module/package
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pyright]
+pythonVersion = "3.14"
+strict = ["privacyforms_pdf"]
+typeCheckingMode = "strict"
+exclude = ["tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=privacyforms_pdf --cov-report=term-missing --cov-report=html --cov-fail-under=90"
+
+[tool.coverage.run]
+source = ["privacyforms_pdf"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
