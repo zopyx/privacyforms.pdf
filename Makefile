@@ -1,4 +1,7 @@
-.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build
+.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build build release
+
+VERSION := $(shell uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+TAG ?= v$(VERSION)
 
 # Default target
 help:
@@ -16,6 +19,8 @@ help:
 	@echo "  clean        - Clean build artifacts and cache files"
 	@echo "  check-pdfcpu - Check if pdfcpu is installed"
 	@echo "  run          - Run the CLI (use ARGS='<args>')"
+	@echo "  build        - Build package artifacts into dist/"
+	@echo "  release      - Run checks/tests, build, tag, and push release"
 	@echo "  ci-build     - Build package for CI/CD (no pdfcpu required)"
 	@echo "  ci           - Run all CI checks (check + test + build)"
 
@@ -86,6 +91,17 @@ dev-setup: install-dev
 ci-build:
 	uv pip install build
 	uv run python -m build
+
+build: ci-build
+	@echo "Build artifacts created in dist/"
+
+release: check test build
+	@git diff-index --quiet HEAD -- || (echo "Working tree is not clean. Commit or stash changes before release." && exit 1)
+	@git rev-parse "$(TAG)" >/dev/null 2>&1 && (echo "Tag $(TAG) already exists." && exit 1) || true
+	git tag -a "$(TAG)" -m "Release $(TAG)"
+	git push origin master
+	git push origin "$(TAG)"
+	@echo "Release $(TAG) created and pushed."
 
 ci: check test ci-build
 	@echo "CI checks passed!"
