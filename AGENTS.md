@@ -41,7 +41,7 @@ privacyforms_pdf/
 |----------|------|---------|
 | Package Manager | uv | `uv sync`, `uv add <pkg>` |
 | Linter/Formatter | Ruff | `uv run ruff check .`, `uv run ruff format .` |
-| Type Checker | Pyright | `uv run pyright privacyforms_pdf` |
+| Type Checker | ty | `uv run ty check` |
 | Testing | pytest + pytest-cov | `uv run pytest` |
 | CLI Framework | Click | Defined in `cli.py` |
 | Data Validation | Pydantic | For future form filling features |
@@ -82,7 +82,7 @@ make test           # Run tests
 make test-cov       # Run tests with coverage
 make lint           # Run ruff linter
 make format         # Format code with ruff
-make type-check     # Run pyright type checker
+make type-check     # Run ty type checker
 make check          # Run all checks (lint + format + type-check)
 make fix            # Auto-fix linting issues
 make clean          # Clean cache files
@@ -250,7 +250,7 @@ uv lock
 - `[project]`: Package metadata and dependencies
 - `[project.scripts]`: CLI entry point (`privacyforms`)
 - `[tool.ruff]`: Linting and formatting config
-- `[tool.pyright]`: Type checking config
+- `[tool.ty]`: Type checking config
 - `[tool.pytest.ini_options]`: Test configuration
 - `[tool.coverage]`: Coverage settings
 
@@ -268,8 +268,8 @@ uv run privacyforms check
 ### Type checking errors
 
 ```bash
-# Run pyright with verbose output
-uv run pyright privacyforms_pdf --verbose
+# Run ty with verbose output
+uv run ty check --verbose
 ```
 
 ### Test failures

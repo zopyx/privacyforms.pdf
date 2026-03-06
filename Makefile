@@ -48,7 +48,7 @@ format-check:
 	uv run ruff format --check privacyforms_pdf tests
 
 type-check:
-	uv run pyright privacyforms_pdf
+	uv run ty check
 
 check: lint format-check type-check
 	@echo "All checks passed!"

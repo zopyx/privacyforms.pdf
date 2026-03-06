@@ -15,7 +15,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = ["pytest>=9", "pytest-cov>=7", "ruff>=0.15", "pyright>=1.1"]
+dev = [
+    "pytest>=9",
+    "pytest-cov>=7",
+    "ruff>=0.15",
+    "pyright>=1.1",
+    "ty>=0.0.21",
+]
 
 [tool.ruff]
 line-length = 100
@@ -40,11 +46,7 @@ ignore = ["D100", "D104"]  # Missing docstring in public module/package
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.pyright]
-pythonVersion = "3.13"
-strict = ["privacyforms_pdf"]
-typeCheckingMode = "strict"
-exclude = ["tests"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -56,7 +56,7 @@ jobs:
         run: uv sync --group dev
 
       - name: Run type checker
-        run: uv run pyright privacyforms_pdf
+        run: uv run ty check
 
   test:
     name: Test (Python ${{ matrix.python-version }})
