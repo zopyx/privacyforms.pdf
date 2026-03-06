@@ -607,3 +607,165 @@ class TestFillFormCommand:
             )
             assert result.exit_code != 0
             assert "does not contain a form" in result.output.lower()
+
+
+    def test_fill_form_simple_format(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with simple format JSON."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Candidate Name": "John Smith", "Full time": true}')
+        output_file = tmp_path / "output.pdf"
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                FormField(
+                    field_type="textfield",
+                    pages=[1],
+                    id="1",
+                    name="Candidate Name",
+                    value="",
+                    locked=False,
+                ),
+                FormField(
+                    field_type="checkbox",
+                    pages=[1],
+                    id="2",
+                    name="Full time",
+                    value=False,
+                    locked=False,
+                ),
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "_run_command") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "-o", str(output_file)],
+            )
+            assert result.exit_code == 0
+            assert "validation passed" in result.output.lower()
+            assert "saved to" in result.output.lower()
+
+    def test_fill_form_simple_format_flag(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with --simple flag."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "John"}')
+        output_file = tmp_path / "output.pdf"
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                FormField(
+                    field_type="textfield",
+                    pages=[1],
+                    id="1",
+                    name="Name",
+                    value="",
+                    locked=False,
+                )
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "_run_command") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "-o", str(output_file), "--simple"],
+            )
+            assert result.exit_code == 0
+            assert "validation passed" in result.output.lower()
+
+    def test_fill_form_simple_validation_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command validation fails with simple format."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Agree": "not-a-boolean"}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                FormField(
+                    field_type="checkbox",
+                    pages=[1],
+                    id="1",
+                    name="Agree",
+                    value=False,
+                    locked=False,
+                )
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+            assert result.exit_code != 0
+            assert "boolean" in result.output.lower() or "boolean" in result.stderr.lower()
+
+    def test_fill_form_simple_format_strict(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with simple format and --strict flag."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "John"}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                FormField(
+                    field_type="textfield",
+                    pages=[1],
+                    id="1",
+                    name="Name",
+                    value="",
+                    locked=False,
+                ),
+                FormField(
+                    field_type="textfield",
+                    pages=[1],
+                    id="2",
+                    name="Missing",
+                    value="",
+                    locked=False,
+                ),
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(
+                main, ["fill-form", str(pdf_file), str(json_file), "--strict"]
+            )
+            assert result.exit_code != 0
+            assert "missing" in result.output.lower() or "required" in result.output.lower()

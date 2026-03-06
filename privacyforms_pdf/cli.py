@@ -204,34 +204,63 @@ def info(pdf_path: Path) -> None:
     default=False,
     help="Require all form fields to be provided (default: not strict)",
 )
+@click.option(
+    "--simple/--no-simple",
+    default=False,
+    help="Use simple key:value JSON format (default: auto-detect)",
+)
 def fill_form(
-    pdf_path: Path, json_path: Path, output: Path | None, validate: bool, strict: bool
+    pdf_path: Path,
+    json_path: Path,
+    output: Path | None,
+    validate: bool,
+    strict: bool,
+    simple: bool,
 ) -> None:
     """Fill a PDF form with data from a JSON file.
 
     PDF_PATH is the path to the PDF form file.
     JSON_PATH is the path to the JSON file with form data.
 
-    The JSON file should match the format produced by the 'extract' command.
-    Only fields to be filled need to be included - others will remain unchanged.
+    The JSON file can be in two formats:
+    1. Simple key:value format: {"Field Name": "value", "Checkbox": true}
+    2. pdfcpu export format: {"forms": [{"textfield": [...]}]}
+
+    The format is auto-detected, or you can use --simple to force simple format.
 
     Examples:
-        pdf-forms fill-form form.pdf data.json
+        # Simple format (recommended)
         pdf-forms fill-form form.pdf data.json -o filled.pdf
+
+        # With validation and strict mode
         pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
-        pdf-forms fill-form form.pdf data.json --no-validate
+
+        # Skip validation
+        pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
+
+        # Force simple format detection
+        pdf-forms fill-form form.pdf data.json -o filled.pdf --simple
     """
     extractor = create_extractor()
 
     try:
+        # Read and parse JSON
+        with open(json_path, encoding="utf-8") as f:
+            form_data = json.load(f)
+
+        # Detect format if not explicitly specified
+        is_simple = simple or extractor._is_simple_format(form_data)
+
         # First, validate if requested
         if validate:
-            with open(json_path, encoding="utf-8") as f:
-                form_data = json.load(f)
-
-            errors = extractor.validate_form_data(
-                pdf_path, form_data, strict=strict, allow_extra_fields=False
-            )
+            if is_simple:
+                errors = extractor.validate_simple_form_data(
+                    pdf_path, form_data, strict=strict, allow_extra_fields=False
+                )
+            else:
+                errors = extractor.validate_form_data(
+                    pdf_path, form_data, strict=strict, allow_extra_fields=False
+                )
             if errors:
                 click.echo("Validation errors:", err=True)
                 for error in errors:
@@ -240,10 +269,8 @@ def fill_form(
 
             click.echo("✓ Form data validation passed")
 
-        # Fill the form
-        extractor.fill_form_from_json(
-            pdf_path, json_path, output, validate=False  # Already validated above
-        )
+        # Fill the form (convert simple format if needed)
+        extractor.fill_form(pdf_path, form_data, output, validate=False)
 
         if output:
             click.echo(f"✓ Form filled and saved to: {output}")
