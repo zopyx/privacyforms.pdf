@@ -989,7 +989,7 @@ def _extract_with_pymupdf(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
     Returns:
         Dictionary mapping field names to FieldGeometry.
     """
-    import fitz  # type: ignore[import-not-found]  # pymupdf - optional dependency
+    import fitz  # pymupdf - optional dependency
 
     geometry_map: dict[str, FieldGeometry] = {}
 
@@ -1082,7 +1082,7 @@ def _extract_with_pdfplumber(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
 
 # Auto-register available backends on module load
 try:
-    import fitz  # noqa: F401  # type: ignore[import-not-found]  # optional dependency
+    import fitz  # noqa: F401  # optional dependency
 
     _GEOMETRY_BACKENDS["pymupdf"] = _extract_with_pymupdf
     logger.debug("Registered geometry backend: pymupdf")
