@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from importlib.metadata import version as get_version
+
 import click
 
 from .extractor import (
@@ -15,7 +17,7 @@ from .extractor import (
 )
 
 
-def create_extractor(extract_geometry: bool = True) -> PDFFormExtractor:  # noqa: ARG001
+def create_extractor(extract_geometry: bool = True) -> PDFFormExtractor:
     """Create a PDFFormExtractor instance, handling errors gracefully.
 
     Args:
@@ -29,7 +31,7 @@ def create_extractor(extract_geometry: bool = True) -> PDFFormExtractor:  # noqa
 
 
 @click.group()
-@click.version_option(version="0.1.2", prog_name="pdf-forms")
+@click.version_option(version=get_version("privacyforms-pdf"), prog_name="pdf-forms")
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """PDF Form extraction and manipulation tools using pypdf.

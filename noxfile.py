@@ -30,7 +30,7 @@ def test(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     # Run tests
     session.run(
         "uv",
@@ -59,7 +59,7 @@ def lint(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     session.run(
         "uv",
         "run",
@@ -97,7 +97,7 @@ def type_check(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     session.run(
         "uv",
         "run",
@@ -122,7 +122,7 @@ def format_code(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     session.run(
         "uv",
         "run",
@@ -149,7 +149,7 @@ def fix(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     session.run(
         "uv",
         "run",
@@ -177,7 +177,7 @@ def check_all(session: nox.Session) -> None:
         "dev",
         env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
-    
+
     # Run tests
     session.run(
         "uv",

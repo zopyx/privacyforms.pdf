@@ -378,7 +378,16 @@ class PDFFormExtractor:
         """
         options = field.get("/Opt", [])
         if options:
-            return [str(opt) for opt in options]
+            result = []
+            for opt in options:
+                # Options can be text or [export_value, label]
+                if isinstance(opt, list) and len(opt) >= 2:
+                    result.append(str(opt[1]))
+                elif isinstance(opt, list) and len(opt) == 1:
+                    result.append(str(opt[0]))
+                else:
+                    result.append(str(opt))
+            return result
 
         # For radio buttons, check Kids
         kids = field.get("/Kids", [])
@@ -392,8 +401,8 @@ class PDFFormExtractor:
                     if "/N" in ap:
                         # Get the appearance names
                         names = list(ap["/N"].keys())
-                        opt_list.extend([str(n) for n in names])
-            return opt_list
+                        opt_list.extend([str(n) for n in names if str(n).lower() != "/off"])
+            return list(dict.fromkeys(opt_list))  # Deduplicate while preserving order
 
         return []
 
@@ -440,10 +449,8 @@ class PDFFormExtractor:
         if not fields:
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
-        # Extract geometry if requested
-        geometry_map: dict[str, FieldGeometry] = {}
-        if self._extract_geometry:
-            geometry_map = self._extract_geometry_from_pdf(reader)
+        # Extract widget info (pages and geometry) in one pass
+        widget_info = self._extract_widgets_info(reader)
 
         # Parse fields into PDFField objects
         pdf_fields: list[PDFField] = []
@@ -458,14 +465,13 @@ class PDFFormExtractor:
             # Get field value
             value = self._get_field_value(field_data)
 
-            # Get pages (this requires scanning the document)
-            pages = self._get_field_pages(reader, field_name)
+            # Get info from widget scan
+            info = widget_info.get(field_name, ([], None))
+            pages = info[0] if info[0] else [1]
+            geometry = info[1] if self._extract_geometry else None
 
             # Get options for choice fields
             options = self._get_field_options(field_data)
-
-            # Get geometry if available
-            geometry = geometry_map.get(field_name)
 
             # Create PDFField
             pdf_field = PDFField(
@@ -499,7 +505,7 @@ class PDFFormExtractor:
         )
 
     def _get_field_pages(self, reader: PdfReader, field_name: str) -> list[int]:
-        """Find which pages contain the field widget.
+        """Find which pages contain the field widget (legacy).
 
         Args:
             reader: PdfReader instance.
@@ -508,41 +514,11 @@ class PDFFormExtractor:
         Returns:
             List of 1-based page numbers where field appears.
         """
-        pages: list[int] = []
-
-        for page_num, page in enumerate(reader.pages, start=1):
-            if "/Annots" in page:
-                annots = cast("ArrayObject", page["/Annots"])
-                for annot_ref in annots:
-                    try:
-                        annot = (
-                            annot_ref.get_object()
-                            if hasattr(annot_ref, "get_object")
-                            else annot_ref
-                        )
-                        if annot.get("/Subtype") == "/Widget":
-                            # Get field name from T entry
-                            t_value = annot.get("/T")
-                            if t_value:
-                                name = (
-                                    str(t_value)
-                                    if isinstance(t_value, str)
-                                    else str(getattr(t_value, "name", t_value))
-                                )
-                                if name == field_name:
-                                    pages.append(page_num)
-                                    break
-                    except Exception:  # noqa: S110
-                        pass
-
-        # If no pages found, assume page 1 (common case)
-        if not pages:
-            pages = [1]
-
-        return pages
+        widget_info = self._extract_widgets_info(reader)
+        return widget_info.get(field_name, ([1], None))[0]
 
     def _extract_geometry_from_pdf(self, reader: PdfReader) -> dict[str, FieldGeometry]:
-        """Extract field geometry from PDF using pypdf.
+        """Extract field geometry from PDF using pypdf (legacy).
 
         Args:
             reader: PdfReader instance.
@@ -550,7 +526,23 @@ class PDFFormExtractor:
         Returns:
             Dictionary mapping field names to FieldGeometry.
         """
-        geometry_map: dict[str, FieldGeometry] = {}
+        widget_info = self._extract_widgets_info(reader)
+        return {
+            name: info[1] for name, info in widget_info.items() if info[1] is not None
+        }
+
+    def _extract_widgets_info(
+        self, reader: PdfReader
+    ) -> dict[str, tuple[list[int], FieldGeometry | None]]:
+        """Scan all pages once to find widget pages and geometry.
+
+        Args:
+            reader: PdfReader instance.
+
+        Returns:
+            Dictionary mapping field names to (pages_list, geometry_object).
+        """
+        info: dict[str, tuple[list[int], FieldGeometry | None]] = {}
 
         for page_num, page in enumerate(reader.pages, start=1):
             if "/Annots" not in page:
@@ -579,18 +571,30 @@ class PDFFormExtractor:
                     )
 
                     # Get rectangle
+                    geometry = None
                     rect = annot.get("/Rect")
                     if rect:
-                        # rect is [x0, y0, x1, y1]
                         x0, y0, x1, y1 = [float(coord) for coord in rect]
-                        geometry_map[field_name] = FieldGeometry(
+                        geometry = FieldGeometry(
                             page=page_num,
                             rect=(x0, y0, x1, y1),
                         )
+
+                    # Update info map
+                    if field_name not in info:
+                        info[field_name] = ([page_num], geometry)
+                    else:
+                        pages, existing_geom = info[field_name]
+                        if page_num not in pages:
+                            pages.append(page_num)
+                        # Keep the first geometry if multiple exist (current limitation)
+                        if existing_geom is None:
+                            info[field_name] = (pages, geometry)
+
                 except Exception:  # noqa: S110
                     pass
 
-        return geometry_map
+        return info
 
     def _build_raw_data_structure(self, fields: list[PDFField], source: str) -> dict[str, Any]:
         """Build raw data structure for export.
@@ -866,12 +870,16 @@ class PDFFormExtractor:
             str_value = ("/Yes" if value else "/Off") if isinstance(value, bool) else str(value)
             field_values[field_name] = str_value
 
-        # Update all fields at once
+        # Update all fields at once on all pages where they appear
         if field_values:
-            writer.update_page_form_field_values(
-                writer.pages[0],  # Page reference (fields are updated across all pages)
-                field_values,
-            )
+            # We need to call update_page_form_field_values for each page
+            # to ensure all widgets are updated. pypdf 5+ correctly handles
+            # this by only updating widgets present on the passed page.
+            for page in writer.pages:
+                writer.update_page_form_field_values(
+                    page,
+                    field_values,
+                )
 
         # Write output
         output_file = Path(output_path) if output_path else pdf_path
