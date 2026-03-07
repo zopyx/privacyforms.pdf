@@ -199,6 +199,58 @@ Represents the geometry (position and size) of a form field.
 - `y: float`: Bottom coordinate (PDF coordinate system).
 - `width: float`: Field width in points.
 - `height: float`: Field height in points.
+- `units: str`: Unit of measurement (always "pt" for points).
+
+### JSON Export Format
+
+When using `pdf-forms extract` or `extract_to_json()`, the output JSON has the following structure:
+
+```json
+{
+  "source": "path/to/form.pdf",
+  "pdf_version": "1.7",
+  "has_form": true,
+  "fields": [
+    {
+      "name": "Field Name",
+      "id": "1",
+      "field_type": "textfield",
+      "value": "Field Value",
+      "pages": [1],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [53.0, 1077.0, 414.0, 1104.0],
+        "x": 53.0,
+        "y": 1077.0,
+        "width": 361.0,
+        "height": 27.0,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    }
+  ]
+}
+```
+
+**Field Types:**
+- `textfield`: Text input fields
+- `datefield`: Date input fields (may include `format` attribute)
+- `checkbox`: Boolean/checkbox fields (value is `true` or `false`)
+- `radiobuttongroup`: Radio button groups (may include `options` array)
+- `combobox`: Dropdown/combo boxes (may include `options` array)
+- `listbox`: List selection boxes (may include `options` array)
+- `signature`: Signature fields
+
+**Geometry:**
+The `geometry` object contains the field's position and size in PDF points (1/72 inch):
+- `rect`: Array of `[x0, y0, x1, y1]` coordinates
+- `x`, `y`: Bottom-left corner position
+- `width`, `height`: Field dimensions
+- Note: PDF coordinates have origin (0,0) at bottom-left of the page
+- `width: float`: Field width in points.
+- `height: float`: Field height in points.
 
 ### Exceptions
 
