@@ -22,19 +22,17 @@ jobs:
         with:
           version: "0.6.x"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+      - name: Install Python
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --python 3.13
 
       - name: Run linter
-        run: uv run ruff check privacyforms_pdf tests
+        run: uv run --python 3.13 ruff check privacyforms_pdf tests
 
       - name: Check formatting
-        run: uv run ruff format --check privacyforms_pdf tests
+        run: uv run --python 3.13 ruff format --check privacyforms_pdf tests
 
   type-check:
     name: Type Check
@@ -47,16 +45,14 @@ jobs:
         with:
           version: "0.6.x"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+      - name: Install Python
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --python 3.13
 
       - name: Run type checker
-        run: uv run ty check
+        run: uv run --python 3.13 ty check
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -88,18 +84,15 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.6.x"
-          python-version: ${{ matrix.python-version }}
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --python ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run pytest -v --cov --cov-report=xml
+        run: uv run --python ${{ matrix.python-version }} pytest -v --cov --cov-report=xml
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
