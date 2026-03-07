@@ -20,6 +20,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "nox>=2026.2.9",
     "pytest>=9",
     "pytest-cov>=7",
     "ruff>=0.15",
