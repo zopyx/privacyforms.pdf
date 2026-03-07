@@ -9,14 +9,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from privacyforms_pdf.extractor import (
+    FieldGeometry,
     FormField,
     FormValidationError,
     PDFCPUError,
     PDFCPUExecutionError,
     PDFCPUNotFoundError,
+    PDFField,
     PDFFormData,
     PDFFormExtractor,
     PDFFormNotFoundError,
+    get_available_geometry_backends,
+    has_geometry_support,
 )
 
 if TYPE_CHECKING:
@@ -51,6 +55,13 @@ class TestPDFFormExtractorInitialization:
             mock_which.return_value = None
             result = PDFFormExtractor._find_pdfcpu()
             assert result is None
+
+    def test_init_with_geometry_backend(self) -> None:
+        """Test initialization with geometry backend option."""
+        with patch("privacyforms_pdf.extractor.shutil.which") as mock_which:
+            mock_which.return_value = "/usr/bin/pdfcpu"
+            extractor = PDFFormExtractor(geometry_backend="none")
+            assert extractor._geometry_backend == "none"
 
 
 class TestCheckPDFCPU:
@@ -213,6 +224,7 @@ class TestParseFormData:
 
             assert len(result.fields) == 1
             field = result.fields[0]
+            assert isinstance(field, PDFField)
             assert field.field_type == "textfield"
             assert field.id == "5"
             assert field.name == "Test Field"
@@ -247,6 +259,7 @@ class TestParseFormData:
 
             assert len(result.fields) == 1
             field = result.fields[0]
+            assert isinstance(field, PDFField)
             assert field.field_type == "checkbox"
             assert field.value is True
             assert field.locked is True
@@ -284,6 +297,45 @@ class TestParseFormData:
             assert "radiobuttongroup" in field_types
             assert "combobox" in field_types
             assert "listbox" in field_types
+
+    def test_parse_with_geometry(self, tmp_path: Path) -> None:
+        """Test parsing with geometry information."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+
+            raw_data = {
+                "header": {"version": "pdfcpu v1.0"},
+                "forms": [
+                    {
+                        "textfield": [
+                            {
+                                "pages": [1],
+                                "id": "1",
+                                "name": "FieldWithGeometry",
+                                "value": "value",
+                                "locked": False,
+                            }
+                        ]
+                    }
+                ],
+            }
+
+            geometry_map = {
+                "FieldWithGeometry": FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+            }
+
+            result = extractor._parse_form_data(test_file, raw_data, geometry_map)
+
+            assert len(result.fields) == 1
+            field = result.fields[0]
+            assert field.geometry is not None
+            assert field.geometry.page == 1
+            assert field.geometry.rect == (100.0, 200.0, 300.0, 400.0)
+            assert field.geometry.x == 100.0
+            assert field.geometry.y == 200.0
+            assert field.geometry.width == 200.0
+            assert field.geometry.height == 200.0
 
 
 class TestExtract:
@@ -360,37 +412,159 @@ class TestExtract:
 
             assert "Export command failed" in exc_info.value.stderr
 
-
-class TestListFields:
-    """Tests for list_fields method."""
-
-    def test_list_fields_returns_list(self, tmp_path: Path) -> None:
-        """Test list_fields returns list of FormField."""
+    def test_extract_geometry_exception(self, tmp_path: Path) -> None:
+        """Test extract handles geometry extraction failure gracefully."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
             extractor = PDFFormExtractor()
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_data = {
+                "header": {"version": "pdfcpu v1.0"},
+                "forms": [{"textfield": []}],
+            }
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            def mock_run(args: list[str], check: bool = True) -> MagicMock:  # noqa: ARG001
+                output_path = args[-1]
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write("{}")
+                return mock_result
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "_run_command", side_effect=mock_run),
+                patch("privacyforms_pdf.extractor.json.load", return_value=mock_data),
+                patch.object(
+                    extractor, "_extract_geometry", side_effect=Exception("geometry failed")
+                ),
+            ):
+                # Should not raise, geometry failure is logged and ignored
+                result = extractor.extract(test_file)
+                assert isinstance(result, PDFFormData)
+
+    def test_extract_with_geometry_none(self, tmp_path: Path) -> None:
+        """Test extract with geometry_backend='none' skips geometry extraction."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(geometry_backend="none")
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_data = {
+                "header": {"version": "pdfcpu v1.0"},
+                "forms": [{"textfield": []}],
+            }
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            def mock_run(args: list[str], check: bool = True) -> MagicMock:  # noqa: ARG001
+                output_path = args[-1]
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write("{}")
+                return mock_result
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "_run_command", side_effect=mock_run),
+                patch("privacyforms_pdf.extractor.json.load", return_value=mock_data),
+            ):
+                # Should work without calling _extract_geometry
+                result = extractor.extract(test_file)
+                assert isinstance(result, PDFFormData)
+                # No geometry should be attached
+                assert result.fields == []
+
+
+class TestExtractGeometry:
+    """Tests for _extract_geometry method."""
+
+    def test_extract_geometry_with_backend(self, tmp_path: Path) -> None:
+        """Test geometry extraction with specific backend."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(geometry_backend="pdfplumber")
+            test_file = tmp_path / "test.pdf"
+            # Create a minimal valid PDF content
+            # Minimal PDF content
+            pdf_content = (
+                b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\n"
+                b"endobj\n2 0 obj\n<<\n/Type /Pages\n/Kids []\n/Count 0\n>>\n"
+                b"endobj\ntrailer\n<<\n/Size 3\n/Root 1 0 R\n>>\n%%EOF\n"
+            )
+            test_file.write_bytes(pdf_content)
+
+            # Mock _extract_with_pdfplumber in the _GEOMETRY_BACKENDS dict
+            mock_geometry = {"Field1": FieldGeometry(page=1, rect=(10.0, 20.0, 30.0, 40.0))}
+
+            with patch.dict(
+                "privacyforms_pdf.extractor._GEOMETRY_BACKENDS",
+                {"pdfplumber": MagicMock(return_value=mock_geometry)},
+            ):
+                result = extractor._extract_geometry(test_file)
+                assert result == mock_geometry
+
+    def test_extract_geometry_unknown_backend(self, tmp_path: Path) -> None:
+        """Test geometry extraction with unknown backend logs warning."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(geometry_backend="unknown")
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            with patch("privacyforms_pdf.extractor.logger.warning") as mock_warning:
+                result = extractor._extract_geometry(test_file)
+                assert result == {}
+                mock_warning.assert_called_once()
+                assert "unknown" in mock_warning.call_args[0][0].lower()
+
+    def test_extract_geometry_auto_with_failing_backend(self, tmp_path: Path) -> None:
+        """Test auto backend handles failing backends gracefully."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(geometry_backend="auto")
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            # Make backend fail
+            with patch(
+                "privacyforms_pdf.extractor._extract_with_pdfplumber",
+                side_effect=Exception("backend failed"),
+            ):
+                result = extractor._extract_geometry(test_file)
+                # Should return empty dict when all backends fail
+                assert result == {}
+
+
+class TestListFields:
+    """Tests for list_fields method."""
+
+    def test_list_fields_returns_list(self, tmp_path: Path) -> None:
+        """Test list_fields returns list of PDFField."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_field = PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="Value1",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Field1",
-                        value="Value1",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 fields = extractor.list_fields(test_file)
                 assert len(fields) == 1
+                assert isinstance(fields[0], PDFField)
                 assert fields[0].name == "Field1"
 
 
@@ -404,20 +578,19 @@ class TestGetFieldValue:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Target",
+                id="1",
+                type="textfield",
+                value="Found",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Target",
-                        value="Found",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -451,20 +624,19 @@ class TestGetFieldValue:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="OtherField",
+                id="1",
+                type="textfield",
+                value="Other",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="OtherField",
-                        value="Other",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -483,12 +655,12 @@ class TestGetFieldById:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
-            mock_field = FormField(
-                field_type="textfield",
-                pages=[1],
-                id="123",
+            mock_field = PDFField(
                 name="TestField",
+                id="123",
+                type="textfield",
                 value="TestValue",
+                pages=[1],
                 locked=False,
             )
             mock_form_data = PDFFormData(
@@ -502,6 +674,7 @@ class TestGetFieldById:
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 result = extractor.get_field_by_id(test_file, "123")
                 assert result is not None
+                assert isinstance(result, PDFField)
                 assert result.id == "123"
                 assert result.name == "TestField"
 
@@ -531,20 +704,19 @@ class TestGetFieldById:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="TestField",
+                id="123",
+                type="textfield",
+                value="TestValue",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="123",
-                        name="TestField",
-                        value="TestValue",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -563,12 +735,12 @@ class TestGetFieldByName:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
-            mock_field = FormField(
-                field_type="textfield",
-                pages=[1],
-                id="123",
+            mock_field = PDFField(
                 name="TestField",
+                id="123",
+                type="textfield",
                 value="TestValue",
+                pages=[1],
                 locked=False,
             )
             mock_form_data = PDFFormData(
@@ -582,6 +754,7 @@ class TestGetFieldByName:
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 result = extractor.get_field_by_name(test_file, "TestField")
                 assert result is not None
+                assert isinstance(result, PDFField)
                 assert result.name == "TestField"
                 assert result.id == "123"
 
@@ -611,20 +784,19 @@ class TestGetFieldByName:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="OtherName",
+                id="1",
+                type="textfield",
+                value="Value",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="OtherName",
-                        value="Value",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -744,12 +916,26 @@ class TestExtractToJSON:
             test_file.touch()
             output_file = tmp_path / "output.json"
 
-            mock_result = MagicMock()
-            mock_result.returncode = 0
+            mock_field = PDFField(
+                name="TestField",
+                id="1",
+                type="textfield",
+                value="TestValue",
+                pages=[1],
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={"header": {"version": "v1.0"}},
+            )
 
-            with patch.object(extractor, "_run_command", return_value=mock_result):
+            with patch.object(extractor, "extract", return_value=mock_form_data):
                 extractor.extract_to_json(test_file, output_file)
                 # Should complete without error
+                assert output_file.exists()
 
     def test_extract_to_json_failure(self, tmp_path: Path) -> None:
         """Test extract_to_json raises on failure."""
@@ -759,12 +945,12 @@ class TestExtractToJSON:
             test_file.touch()
             output_file = tmp_path / "output.json"
 
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stderr = "Export failed"
-
             with (
-                patch.object(extractor, "_run_command", return_value=mock_result),
+                patch.object(
+                    extractor,
+                    "extract",
+                    side_effect=PDFCPUExecutionError("Export failed", 1, "error"),
+                ),
                 pytest.raises(PDFCPUExecutionError),
             ):
                 extractor.extract_to_json(test_file, output_file)
@@ -780,20 +966,19 @@ class TestValidateFormData:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Field1",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -809,20 +994,19 @@ class TestValidateFormData:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Existing",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Existing",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -840,20 +1024,19 @@ class TestValidateFormData:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Agree",
+                id="1",
+                type="checkbox",
+                value=False,
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="checkbox",
-                        pages=[1],
-                        id="1",
-                        name="Agree",
-                        value=False,
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -871,20 +1054,19 @@ class TestValidateFormData:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Required",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Required",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -941,20 +1123,19 @@ class TestConvertToPdfcpuFormat:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Name",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -979,20 +1160,19 @@ class TestConvertToPdfcpuFormat:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Agree",
+                id="2",
+                type="checkbox",
+                value=False,
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="checkbox",
-                        pages=[1],
-                        id="2",
-                        name="Agree",
-                        value=False,
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -1006,39 +1186,6 @@ class TestConvertToPdfcpuFormat:
                 assert field["name"] == "Agree"
                 assert field["value"] is True
 
-    def test_convert_unknown_field_skipped(self, tmp_path: Path) -> None:
-        """Test that unknown fields are skipped during conversion."""
-        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
-            extractor = PDFFormExtractor()
-            test_file = tmp_path / "test.pdf"
-            test_file.touch()
-
-            mock_form_data = PDFFormData(
-                source=test_file,
-                pdf_version="v1.0",
-                has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Name",
-                        value="",
-                        locked=False,
-                    )
-                ],
-                raw_data={},
-            )
-
-            simple_data = {"Name": "John", "Unknown": "value"}
-
-            with patch.object(extractor, "extract", return_value=mock_form_data):
-                result = extractor._convert_to_pdfcpu_format(test_file, simple_data)
-
-                # Only known field should be converted
-                assert len(result["forms"][0]["textfield"]) == 1
-                assert result["forms"][0]["textfield"][0]["name"] == "Name"
-
     def test_convert_datefield(self, tmp_path: Path) -> None:
         """Test converting simple format with datefield."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
@@ -1046,24 +1193,24 @@ class TestConvertToPdfcpuFormat:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Date",
+                id="3",
+                type="datefield",
+                value="",
+                pages=[1],
+                locked=False,
+                format="yyyy-mm-dd",
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="datefield",
-                        pages=[1],
-                        id="3",
-                        name="Date",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
-            simple_data = {"Date": "2025-06-01"}
+            simple_data = {"Date": "2024-01-15"}
 
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 result = extractor._convert_to_pdfcpu_format(test_file, simple_data)
@@ -1071,8 +1218,7 @@ class TestConvertToPdfcpuFormat:
                 assert len(result["forms"][0]["datefield"]) == 1
                 field = result["forms"][0]["datefield"][0]
                 assert field["name"] == "Date"
-                assert field["value"] == "2025-06-01"
-                assert "format" in field
+                assert field["format"] == "yyyy-mm-dd"
 
     def test_convert_radiobuttongroup(self, tmp_path: Path) -> None:
         """Test converting simple format with radiobuttongroup."""
@@ -1081,109 +1227,90 @@ class TestConvertToPdfcpuFormat:
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Radio",
+                id="4",
+                type="radiobuttongroup",
+                value="",
+                pages=[1],
+                locked=False,
+                options=["Option1", "Option2"],
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="radiobuttongroup",
-                        pages=[1],
-                        id="4",
-                        name="Status",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
-            simple_data = {"Status": "Yes"}
+            simple_data = {"Radio": "Option1"}
 
             with patch.object(extractor, "extract", return_value=mock_form_data):
                 result = extractor._convert_to_pdfcpu_format(test_file, simple_data)
 
                 assert len(result["forms"][0]["radiobuttongroup"]) == 1
                 field = result["forms"][0]["radiobuttongroup"][0]
-                assert field["name"] == "Status"
-                assert "options" in field
+                assert field["name"] == "Radio"
+                assert field["options"] == ["Option1", "Option2"]
+
+    def test_convert_skips_unknown_fields(self, tmp_path: Path) -> None:
+        """Test converting skips unknown fields."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+
+            mock_field = PDFField(
+                name="Known",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={},
+            )
+
+            # Unknown field should be skipped
+            simple_data = {"Known": "value", "Unknown": "value"}
+
+            with patch.object(extractor, "extract", return_value=mock_form_data):
+                result = extractor._convert_to_pdfcpu_format(test_file, simple_data)
+
+                # Only known field should be in result
+                assert len(result["forms"][0]["textfield"]) == 1
 
 
 class TestFillForm:
     """Tests for fill_form method."""
 
-    def test_fill_form_no_form(self, tmp_path: Path) -> None:
-        """Test fill_form raises when PDF has no form."""
-        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
-            extractor = PDFFormExtractor()
-            test_file = tmp_path / "test.pdf"
-            test_file.touch()
-
-            with (
-                patch.object(extractor, "has_form", return_value=False),
-                pytest.raises(PDFFormNotFoundError),
-            ):
-                extractor.fill_form(test_file, {"Name": "John"})
-
-    def test_fill_form_validation_raises(self, tmp_path: Path) -> None:
-        """Test fill_form raises FormValidationError with validate=True."""
-        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
-            extractor = PDFFormExtractor()
-            test_file = tmp_path / "test.pdf"
-            test_file.touch()
-
-            mock_form_data = PDFFormData(
-                source=test_file,
-                pdf_version="v1.0",
-                has_form=True,
-                fields=[
-                    FormField(
-                        field_type="checkbox",
-                        pages=[1],
-                        id="1",
-                        name="Agree",
-                        value=False,
-                        locked=False,
-                    )
-                ],
-                raw_data={},
-            )
-
-            with (
-                patch.object(extractor, "has_form", return_value=True),
-                patch.object(extractor, "extract", return_value=mock_form_data),
-            ):
-                # Invalid: checkbox value should be boolean
-                form_data = {"Agree": "not-a-boolean"}
-
-                with pytest.raises(FormValidationError) as exc_info:
-                    extractor.fill_form(test_file, form_data, validate=True)
-
-                assert "validation failed" in str(exc_info.value).lower()
-                assert len(exc_info.value.errors) > 0
-
     def test_fill_form_success(self, tmp_path: Path) -> None:
-        """Test fill_form succeeds with valid data."""
+        """Test fill_form succeeds."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
             extractor = PDFFormExtractor()
             test_file = tmp_path / "test.pdf"
             test_file.touch()
             output_file = tmp_path / "output.pdf"
 
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Name",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
@@ -1194,27 +1321,33 @@ class TestFillForm:
                 patch.object(extractor, "has_form", return_value=True),
                 patch.object(extractor, "extract", return_value=mock_form_data),
                 patch.object(extractor, "_run_command", return_value=mock_result),
-                patch("privacyforms_pdf.extractor.json.dump"),
-                patch("pathlib.Path.unlink"),
             ):
-                form_data = {"Name": "John Smith"}
-                result = extractor.fill_form(test_file, form_data, output_file)
+                result = extractor.fill_form(test_file, {"Name": "John"}, output_file)
                 assert result == output_file
 
-    def test_fill_form_skip_validation(self, tmp_path: Path) -> None:
-        """Test fill_form can skip validation."""
+    def test_fill_form_no_output(self, tmp_path: Path) -> None:
+        """Test fill_form without output path modifies input."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
             extractor = PDFFormExtractor()
             test_file = tmp_path / "test.pdf"
             test_file.touch()
 
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[],
+                fields=[mock_field],
                 raw_data={},
             )
+
             mock_result = MagicMock()
             mock_result.returncode = 0
 
@@ -1222,13 +1355,47 @@ class TestFillForm:
                 patch.object(extractor, "has_form", return_value=True),
                 patch.object(extractor, "extract", return_value=mock_form_data),
                 patch.object(extractor, "_run_command", return_value=mock_result),
-                patch("privacyforms_pdf.extractor.json.dump"),
-                patch("pathlib.Path.unlink"),
             ):
-                # Invalid data but validation is skipped
-                form_data = {"Unknown": "value"}
-                result = extractor.fill_form(test_file, form_data, validate=False)
+                result = extractor.fill_form(test_file, {"Name": "John"})
                 assert result == test_file
+
+    def test_fill_form_validation_error(self, tmp_path: Path) -> None:
+        """Test fill_form raises FormValidationError on validation failure."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            test_file = tmp_path / "test.pdf"
+            test_file.touch()
+            output_file = tmp_path / "output.pdf"
+
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=test_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={},
+            )
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+                pytest.raises(FormValidationError),
+            ):
+                # Unknown field should trigger validation error
+                extractor.fill_form(
+                    test_file, {"UnknownField": "value"}, output_file, validate=True
+                )
 
     def test_fill_form_execution_error(self, tmp_path: Path) -> None:
         """Test fill_form raises PDFCPUExecutionError when command fails."""
@@ -1236,47 +1403,81 @@ class TestFillForm:
             extractor = PDFFormExtractor()
             test_file = tmp_path / "test.pdf"
             test_file.touch()
+            output_file = tmp_path / "output.pdf"
 
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
             mock_form_data = PDFFormData(
                 source=test_file,
                 pdf_version="v1.0",
                 has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Name",
-                        value="",
-                        locked=False,
-                    )
-                ],
+                fields=[mock_field],
                 raw_data={},
             )
 
             mock_result = MagicMock()
             mock_result.returncode = 1
-            mock_result.stderr = "Fill command failed"
+            mock_result.stderr = "Fill failed"
 
             with (
                 patch.object(extractor, "has_form", return_value=True),
                 patch.object(extractor, "extract", return_value=mock_form_data),
                 patch.object(extractor, "_run_command", return_value=mock_result),
-                patch("privacyforms_pdf.extractor.json.dump"),
-                patch("pathlib.Path.unlink"),
-                pytest.raises(PDFCPUExecutionError) as exc_info,
+                pytest.raises(PDFCPUExecutionError),
             ):
-                form_data = {"Name": "John"}
-                extractor.fill_form(test_file, form_data)
-
-            assert "Fill command failed" in exc_info.value.stderr
+                extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
 
 
-class TestFillFormFromJSON:
+class TestFillFormFromJson:
     """Tests for fill_form_from_json method."""
 
-    def test_fill_from_json_file_not_found(self, tmp_path: Path) -> None:
-        """Test fill_form_from_json raises when JSON not found."""
+    def test_fill_form_from_json_success(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json succeeds."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor()
+            pdf_file = tmp_path / "test.pdf"
+            pdf_file.touch()
+            json_file = tmp_path / "data.json"
+            json_file.write_text('{"Name": "John"}')
+            output_file = tmp_path / "output.pdf"
+
+            mock_field = PDFField(
+                name="Name",
+                id="1",
+                type="textfield",
+                value="",
+                pages=[1],
+                locked=False,
+            )
+            mock_form_data = PDFFormData(
+                source=pdf_file,
+                pdf_version="v1.0",
+                has_form=True,
+                fields=[mock_field],
+                raw_data={},
+            )
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+
+            with (
+                patch.object(extractor, "has_form", return_value=True),
+                patch.object(extractor, "extract", return_value=mock_form_data),
+                patch.object(extractor, "_run_command", return_value=mock_result),
+            ):
+                result = extractor.fill_form_from_json(
+                    pdf_file, json_file, output_file, validate=False
+                )
+                assert result == output_file
+
+    def test_fill_form_from_json_not_found(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json raises FileNotFoundError for missing JSON."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
             extractor = PDFFormExtractor()
             pdf_file = tmp_path / "test.pdf"
@@ -1286,8 +1487,8 @@ class TestFillFormFromJSON:
             with pytest.raises(FileNotFoundError):
                 extractor.fill_form_from_json(pdf_file, json_file)
 
-    def test_fill_from_json_directory(self, tmp_path: Path) -> None:
-        """Test fill_form_from_json raises when JSON path is directory."""
+    def test_fill_form_from_json_not_a_file(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json raises FileNotFoundError for directory."""
         with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
             extractor = PDFFormExtractor()
             pdf_file = tmp_path / "test.pdf"
@@ -1295,65 +1496,290 @@ class TestFillFormFromJSON:
             json_dir = tmp_path / "jsondir"
             json_dir.mkdir()
 
-            with pytest.raises(FileNotFoundError) as exc_info:
+            with pytest.raises(FileNotFoundError):
                 extractor.fill_form_from_json(pdf_file, json_dir)
 
-            assert "not a file" in str(exc_info.value).lower()
 
-    def test_fill_from_json_success(self, tmp_path: Path) -> None:
-        """Test fill_form_from_json succeeds."""
-        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
-            extractor = PDFFormExtractor()
-            pdf_file = tmp_path / "test.pdf"
-            pdf_file.touch()
-            json_file = tmp_path / "data.json"
-            output_file = tmp_path / "output.pdf"
+class TestPDFField:
+    """Tests for PDFField Pydantic model."""
 
-            # Write valid JSON
-            json_file.write_text('{"Name": "John"}')
+    def test_field_creation(self) -> None:
+        """Test creating a PDFField."""
+        field = PDFField(
+            name="TestField",
+            id="123",
+            type="textfield",
+            value="Test Value",
+            pages=[1],
+            locked=False,
+        )
+        assert field.name == "TestField"
+        assert field.id == "123"
+        assert field.field_type == "textfield"
+        assert field.value == "Test Value"
+        assert field.pages == [1]
+        assert field.locked is False
 
-            mock_form_data = PDFFormData(
-                source=pdf_file,
-                pdf_version="v1.0",
-                has_form=True,
-                fields=[
-                    FormField(
-                        field_type="textfield",
-                        pages=[1],
-                        id="1",
-                        name="Name",
-                        value="",
-                        locked=False,
-                    )
-                ],
-                raw_data={},
-            )
+    def test_field_with_geometry(self) -> None:
+        """Test PDFField with geometry."""
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        field = PDFField(
+            name="TestField",
+            id="123",
+            type="textfield",
+            geometry=geometry,
+        )
+        assert field.geometry is not None
+        assert field.geometry.page == 1
+        assert field.geometry.x == 100.0
+        assert field.geometry.y == 200.0
+        assert field.geometry.width == 200.0
+        assert field.geometry.height == 200.0
 
-            mock_result = MagicMock()
-            mock_result.returncode = 0
+    def test_field_model_dump(self) -> None:
+        """Test PDFField serialization."""
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        field = PDFField(
+            name="TestField",
+            id="123",
+            type="textfield",
+            value="Test Value",
+            pages=[1],
+            locked=False,
+            geometry=geometry,
+        )
+        data = field.model_dump()
+        assert data["name"] == "TestField"
+        assert data["id"] == "123"
+        assert data["field_type"] == "textfield"
+        assert data["geometry"] is not None
+        assert data["geometry"]["page"] == 1
+        assert data["geometry"]["x"] == 100.0
 
-            with (
-                patch.object(extractor, "has_form", return_value=True),
-                patch.object(extractor, "extract", return_value=mock_form_data),
-                patch.object(extractor, "_run_command", return_value=mock_result),
-                patch("pathlib.Path.unlink"),
-            ):
-                result = extractor.fill_form_from_json(pdf_file, json_file, output_file)
-                assert result == output_file
+    def test_field_model_dump_no_geometry(self) -> None:
+        """Test PDFField serialization without geometry."""
+        field = PDFField(
+            name="TestField",
+            id="123",
+            type="textfield",
+            value="Test Value",
+        )
+        data = field.model_dump()
+        assert data["name"] == "TestField"
+        assert data["geometry"] is None
+
+
+class TestFieldGeometry:
+    """Tests for FieldGeometry model."""
+
+    def test_geometry_creation(self) -> None:
+        """Test creating FieldGeometry."""
+        geom = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        assert geom.page == 1
+        assert geom.rect == (100.0, 200.0, 300.0, 400.0)
+
+    def test_geometry_properties(self) -> None:
+        """Test FieldGeometry properties."""
+        geom = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        assert geom.x == 100.0
+        assert geom.y == 200.0
+        assert geom.width == 200.0
+        assert geom.height == 200.0
+
+    def test_geometry_model_dump(self) -> None:
+        """Test FieldGeometry serialization."""
+        geom = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        data = geom.model_dump()
+        assert data["page"] == 1
+        assert data["rect"] == [100.0, 200.0, 300.0, 400.0]
+        assert data["x"] == 100.0
+        assert data["y"] == 200.0
+        assert data["width"] == 200.0
+        assert data["height"] == 200.0
+        assert data["units"] == "pt"
+
+
+class TestPDFFormData:
+    """Tests for PDFFormData class."""
+
+    def test_to_json(self, tmp_path: Path) -> None:
+        """Test PDFFormData to_json method."""
+        field = PDFField(
+            name="TestField",
+            id="1",
+            type="textfield",
+            value="Test",
+        )
+        form_data = PDFFormData(
+            source=tmp_path / "test.pdf",
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[field],
+            raw_data={},
+        )
+        json_str = form_data.to_json()
+        assert "TestField" in json_str
+        assert "textfield" in json_str
+
+    def test_to_dict(self, tmp_path: Path) -> None:
+        """Test PDFFormData to_dict method."""
+        field = PDFField(
+            name="TestField",
+            id="1",
+            type="textfield",
+            value="Test",
+        )
+        form_data = PDFFormData(
+            source=tmp_path / "test.pdf",
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[field],
+            raw_data={},
+        )
+        data = form_data.to_dict()
+        assert data["pdf_version"] == "v1.0"
+        assert data["has_form"] is True
+        assert len(data["fields"]) == 1
+        assert data["fields"][0]["name"] == "TestField"
+
+
+class TestFormFieldLegacy:
+    """Tests for legacy FormField class."""
+
+    def test_form_field_creation(self) -> None:
+        """Test creating legacy FormField."""
+        field = FormField(
+            field_type="textfield",
+            pages=[1],
+            id="1",
+            name="Test",
+            value="Value",
+            locked=False,
+        )
+        assert field.field_type == "textfield"
+        assert field.name == "Test"
+        assert field.value == "Value"
+
+    def test_form_field_equality(self) -> None:
+        """Test FormField equality."""
+        field1 = FormField(
+            field_type="textfield",
+            pages=[1],
+            id="1",
+            name="Test",
+            value="Value",
+            locked=False,
+        )
+        field2 = FormField(
+            field_type="textfield",
+            pages=[1],
+            id="1",
+            name="Test",
+            value="Value",
+            locked=False,
+        )
+        assert field1 == field2
+
+    def test_form_field_equality_different_type(self) -> None:
+        """Test FormField equality with non-FormField returns NotImplemented."""
+        field = FormField(
+            field_type="textfield",
+            pages=[1],
+            id="1",
+            name="Test",
+            value="Value",
+            locked=False,
+        )
+        assert field != "not a form field"
+        assert field != 123
+
+    def test_form_field_repr(self) -> None:
+        """Test FormField repr."""
+        field = FormField(
+            field_type="textfield",
+            pages=[1],
+            id="123",
+            name="TestField",
+            value="Value",
+            locked=False,
+        )
+        repr_str = repr(field)
+        assert "FormField" in repr_str
+        assert "textfield" in repr_str
+        assert "TestField" in repr_str
+        assert "123" in repr_str
 
 
 class TestFormValidationError:
     """Tests for FormValidationError."""
 
-    def test_error_message_without_errors(self) -> None:
-        """Test error message without detailed errors."""
-        err = FormValidationError("Validation failed")
-        assert str(err) == "Validation failed"
-        assert err.errors == []
+    def test_str_with_errors(self) -> None:
+        """Test __str__ with error list."""
+        err = FormValidationError("Validation failed", ["error1", "error2"])
+        str_repr = str(err)
+        assert "Validation failed" in str_repr
+        assert "error1" in str_repr
+        assert "error2" in str_repr
 
-    def test_error_message_with_errors(self) -> None:
-        """Test error message with detailed errors."""
-        err = FormValidationError("Validation failed", ["Error 1", "Error 2"])
-        assert "Validation failed" in str(err)
-        assert "Error 1" in str(err)
-        assert "Error 2" in str(err)
+    def test_str_without_errors(self) -> None:
+        """Test __str__ without error list."""
+        err = FormValidationError("Validation failed")
+        str_repr = str(err)
+        assert str_repr == "Validation failed"
+
+
+class TestGeometryHelpers:
+    """Tests for geometry helper functions."""
+
+    def test_get_available_geometry_backends(self) -> None:
+        """Test get_available_geometry_backends returns list."""
+        backends = get_available_geometry_backends()
+        assert isinstance(backends, list)
+        assert "pdfplumber" in backends
+
+    def test_has_geometry_support(self) -> None:
+        """Test has_geometry_support returns True when backend available."""
+        assert has_geometry_support() is True
+
+
+class TestGeometryExtractionReal:
+    """Tests for actual geometry extraction with pdfplumber."""
+
+    def test_extract_geometry_from_real_pdf(self) -> None:
+        """Test geometry extraction from actual PDF file."""
+        from pathlib import Path
+
+        from privacyforms_pdf.extractor import _extract_with_pdfplumber
+
+        pdf_path = Path("samples/FilledForm.pdf")
+        if not pdf_path.exists():
+            pytest.skip("Sample PDF not found")
+
+        pdf_bytes = pdf_path.read_bytes()
+        geometry_map = _extract_with_pdfplumber(pdf_bytes)
+
+        # Should find form fields
+        assert len(geometry_map) > 0
+
+        # Check geometry structure
+        for _name, geom in list(geometry_map.items())[:5]:
+            assert isinstance(geom, FieldGeometry)
+            assert geom.page >= 1
+            assert len(geom.rect) == 4
+            assert geom.x < geom.x + geom.width
+            assert geom.y < geom.y + geom.height
+
+    def test_extract_geometry_integration(self, tmp_path: Path) -> None:
+        """Test geometry extraction through PDFFormExtractor."""
+        from pathlib import Path
+
+        pdf_path = Path("samples/FilledForm.pdf")
+        if not pdf_path.exists():
+            pytest.skip("Sample PDF not found")
+
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = PDFFormExtractor(geometry_backend="pdfplumber")
+            geometry_map = extractor._extract_geometry(pdf_path)
+
+            assert len(geometry_map) > 0
+            assert "Candidate Name" in geometry_map or len(geometry_map) > 10

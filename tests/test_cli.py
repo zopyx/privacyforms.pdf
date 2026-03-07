@@ -11,9 +11,10 @@ from click.testing import CliRunner
 
 from privacyforms_pdf.cli import create_extractor, main
 from privacyforms_pdf.extractor import (
-    FormField,
+    FieldGeometry,
     FormValidationError,
     PDFCPUExecutionError,
+    PDFField,
     PDFFormData,
     PDFFormExtractor,
     PDFFormNotFoundError,
@@ -42,7 +43,13 @@ class TestMainCommand:
         """Test main command shows version."""
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.1" in result.output
+        assert "0.1.2" in result.output
+
+    def test_main_geometry_backend_option(self, runner: CliRunner) -> None:
+        """Test main command accepts geometry backend option."""
+        result = runner.invoke(main, ["--geometry-backend", "none", "--help"])
+        assert result.exit_code == 0
+        assert "geometry-backend" in result.output
 
 
 class TestCheckCommand:
@@ -65,12 +72,62 @@ class TestCheckCommand:
             assert result.exit_code == 1
             assert "pdfcpu not found" in result.output
 
+    def test_check_no_geometry_backends(self, runner: CliRunner) -> None:
+        """Test check command when no geometry backends available."""
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "get_pdfcpu_version", return_value="v0.11.1"),
+            patch("privacyforms_pdf.extractor.get_available_geometry_backends", return_value=[]),
+        ):
+            result = runner.invoke(main, ["check"])
+            assert result.exit_code == 0
+            assert "Geometry extraction not available" in result.output
+
+    def test_check_with_geometry_backend(self, runner: CliRunner) -> None:
+        """Test check command shows geometry support."""
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "get_pdfcpu_version", return_value="v0.11.1"),
+        ):
+            result = runner.invoke(main, ["--geometry-backend", "none", "check"])
+            assert result.exit_code == 0
+
 
 class TestExtractCommand:
     """Tests for the extract command."""
 
-    def test_extract_to_stdout(self, runner: CliRunner, tmp_path: Path) -> None:
-        """Test extract command outputs to stdout."""
+    def test_extract_to_stdout_unified(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test extract command outputs unified format to stdout."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_field = PDFField(
+            name="TestField",
+            id="1",
+            type="textfield",
+            value="Test Value",
+            pages=[1],
+            locked=False,
+        )
+        mock_form_data = PDFFormData(
+            source=test_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[mock_field],
+            raw_data={"header": {"version": "v1.0"}},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(main, ["extract", str(test_file)])
+            assert result.exit_code == 0
+            assert "TestField" in result.output
+            assert "textfield" in result.output
+
+    def test_extract_to_stdout_raw(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test extract command outputs raw format with --raw flag."""
         test_file = tmp_path / "test.pdf"
         test_file.touch()
 
@@ -87,12 +144,41 @@ class TestExtractCommand:
             patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
             patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
         ):
-            result = runner.invoke(main, ["extract", str(test_file)])
+            result = runner.invoke(main, ["extract", str(test_file), "--raw"])
             assert result.exit_code == 0
             assert "header" in result.output
 
-    def test_extract_to_file(self, runner: CliRunner, tmp_path: Path) -> None:
-        """Test extract command writes to output file."""
+    def test_extract_to_file_unified(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test extract command writes unified format to output file."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.json"
+
+        mock_field = PDFField(
+            name="TestField",
+            id="1",
+            type="textfield",
+            value="Test Value",
+        )
+        mock_form_data = PDFFormData(
+            source=test_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[mock_field],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+        ):
+            result = runner.invoke(main, ["extract", str(test_file), "-o", str(output_file)])
+            assert result.exit_code == 0
+            assert "Unified form data extracted to" in result.output
+            assert output_file.exists()
+
+    def test_extract_to_file_raw(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test extract command writes raw format with --raw flag."""
         test_file = tmp_path / "test.pdf"
         test_file.touch()
         output_file = tmp_path / "output.json"
@@ -101,9 +187,11 @@ class TestExtractCommand:
             patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
             patch.object(PDFFormExtractor, "extract_to_json") as mock_extract,
         ):
-            result = runner.invoke(main, ["extract", str(test_file), "-o", str(output_file)])
+            result = runner.invoke(
+                main, ["extract", str(test_file), "-o", str(output_file), "--raw"]
+            )
             assert result.exit_code == 0
-            assert "Form data extracted to" in result.output
+            assert "Raw form data extracted to" in result.output
             mock_extract.assert_called_once_with(test_file, output_file)
 
     def test_extract_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
@@ -146,12 +234,12 @@ class TestListFieldsCommand:
         test_file.touch()
 
         mock_fields = [
-            FormField(
-                field_type="textfield",
-                pages=[1],
-                id="1",
+            PDFField(
                 name="Field Name",
+                id="1",
+                type="textfield",
                 value="Field Value",
+                pages=[1],
                 locked=False,
             )
         ]
@@ -166,6 +254,57 @@ class TestListFieldsCommand:
             assert "Field Name" in result.output
             assert "Field Value" in result.output
             assert "Total fields: 1" in result.output
+
+    def test_list_fields_with_geometry(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows geometry information."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        mock_fields = [
+            PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="Value",
+                pages=[1],
+                geometry=geometry,
+            )
+        ]
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "list_fields", return_value=mock_fields),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "Position" in result.output or "100" in result.output
+            assert "Size" in result.output or "200" in result.output
+
+    def test_list_fields_no_geometry(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command with --no-geometry flag."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        mock_fields = [
+            PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="Value",
+                geometry=geometry,
+            )
+        ]
+
+        with (
+            patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"),
+            patch.object(PDFFormExtractor, "list_fields", return_value=mock_fields),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--no-geometry"])
+            assert result.exit_code == 0
+            # Should still show fields but without geometry columns
+            assert "Field1" in result.output
 
     def test_list_fields_empty(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test list-fields command with no fields."""
@@ -186,12 +325,12 @@ class TestListFieldsCommand:
         test_file.touch()
 
         mock_fields = [
-            FormField(
-                field_type="textfield",
-                pages=[1],
-                id="1",
+            PDFField(
                 name="Long",
+                id="1",
+                type="textfield",
                 value="A" * 100,
+                pages=[1],
                 locked=False,
             )
         ]
@@ -360,6 +499,13 @@ class TestCreateExtractor:
             extractor = create_extractor()
             assert isinstance(extractor, PDFFormExtractor)
 
+    def test_create_extractor_with_geometry_backend(self) -> None:
+        """Test create_extractor with geometry backend."""
+        with patch.object(PDFFormExtractor, "_find_pdfcpu", return_value="/usr/bin/pdfcpu"):
+            extractor = create_extractor(geometry_backend="none")
+            assert isinstance(extractor, PDFFormExtractor)
+            assert extractor._geometry_backend == "none"
+
     def test_create_extractor_failure(self) -> None:
         """Test create_extractor raises ClickException when pdfcpu not found."""
         with (
@@ -405,20 +551,20 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Candidate Name",
+                    id="1",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 ),
-                FormField(
-                    field_type="checkbox",
-                    pages=[1],
-                    id="2",
+                PDFField(
                     name="Full time",
+                    id="2",
+                    type="checkbox",
                     value=False,
+                    pages=[1],
                     locked=False,
                 ),
             ],
@@ -475,12 +621,12 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Name",
+                    id="1",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 )
             ],
@@ -548,12 +694,12 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Name",
+                    id="1",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 )
             ],
@@ -583,20 +729,20 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Name",
+                    id="1",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 ),
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="2",
+                PDFField(
                     name="Missing",
+                    id="2",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 ),
             ],
@@ -623,12 +769,12 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="textfield",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Name",
+                    id="1",
+                    type="textfield",
                     value="",
+                    pages=[1],
                     locked=False,
                 )
             ],
@@ -661,12 +807,12 @@ class TestFillFormCommand:
             pdf_version="v1.0",
             has_form=True,
             fields=[
-                FormField(
-                    field_type="checkbox",
-                    pages=[1],
-                    id="1",
+                PDFField(
                     name="Agree",
+                    id="1",
+                    type="checkbox",
                     value=False,
+                    pages=[1],
                     locked=False,
                 )
             ],
