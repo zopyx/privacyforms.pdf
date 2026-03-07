@@ -1751,9 +1751,11 @@ class TestGeometryExtractionReal:
         from pathlib import Path
 
         try:
-            from privacyforms_pdf.extractor import _extract_with_pdfplumber
+            import pdfplumber  # noqa: F401
         except ImportError:
             pytest.skip("pdfplumber not installed")
+
+        from privacyforms_pdf.extractor import _extract_with_pdfplumber
 
         pdf_path = Path("samples/FilledForm.pdf")
         if not pdf_path.exists():

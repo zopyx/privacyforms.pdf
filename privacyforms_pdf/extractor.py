@@ -1018,7 +1018,7 @@ def _extract_with_pymupdf(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
     return geometry_map
 
 
-def _extract_with_pdfplumber(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
+def _extract_with_pdfplumber(pdf_bytes: bytes) -> dict[str, FieldGeometry]:  # pragma: no cover
     """Extract geometry using pdfplumber.
 
     pdfplumber is a pure-Python alternative that uses pdfminer.six.
@@ -1089,7 +1089,7 @@ try:
 except ImportError:
     logger.debug("PyMuPDF (pymupdf) not available for geometry extraction")
 
-try:
+try:  # pragma: no cover
     import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
 
     _GEOMETRY_BACKENDS["pdfplumber"] = _extract_with_pdfplumber
