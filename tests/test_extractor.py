@@ -1735,7 +1735,8 @@ class TestGeometryHelpers:
         """Test get_available_geometry_backends returns list."""
         backends = get_available_geometry_backends()
         assert isinstance(backends, list)
-        assert "pdfplumber" in backends
+        # pymupdf should always be available, pdfplumber is optional
+        assert "pymupdf" in backends
 
     def test_has_geometry_support(self) -> None:
         """Test has_geometry_support returns True when backend available."""
@@ -1749,7 +1750,10 @@ class TestGeometryExtractionReal:
         """Test geometry extraction from actual PDF file."""
         from pathlib import Path
 
-        from privacyforms_pdf.extractor import _extract_with_pdfplumber
+        try:
+            from privacyforms_pdf.extractor import _extract_with_pdfplumber
+        except ImportError:
+            pytest.skip("pdfplumber not installed")
 
         pdf_path = Path("samples/FilledForm.pdf")
         if not pdf_path.exists():
@@ -1772,6 +1776,11 @@ class TestGeometryExtractionReal:
     def test_extract_geometry_integration(self, tmp_path: Path) -> None:
         """Test geometry extraction through PDFFormExtractor."""
         from pathlib import Path
+
+        try:
+            import pdfplumber  # noqa: F401
+        except ImportError:
+            pytest.skip("pdfplumber not installed")
 
         pdf_path = Path("samples/FilledForm.pdf")
         if not pdf_path.exists():
