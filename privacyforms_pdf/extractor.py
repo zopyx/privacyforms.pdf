@@ -527,9 +527,7 @@ class PDFFormExtractor:
             Dictionary mapping field names to FieldGeometry.
         """
         widget_info = self._extract_widgets_info(reader)
-        return {
-            name: info[1] for name, info in widget_info.items() if info[1] is not None
-        }
+        return {name: info[1] for name, info in widget_info.items() if info[1] is not None}
 
     def _extract_widgets_info(
         self, reader: PdfReader

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
 from importlib.metadata import version as get_version
+from pathlib import Path
 
 import click
 
