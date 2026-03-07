@@ -1,15 +1,17 @@
-"""privacyforms-pdf: Python wrappers for pdfcpu form operations."""
+"""privacyforms-pdf: Python library for PDF form operations using pypdf."""
 
 from .extractor import (
     FieldGeometry,
     FieldNotFoundError,
     FormField,
     FormValidationError,
+    # Backwards compatibility aliases (deprecated, will be removed in a future version)
     PDFCPUError,
     PDFCPUExecutionError,
     PDFCPUNotFoundError,
     PDFField,
     PDFFormData,
+    PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
     get_available_geometry_backends,
@@ -26,12 +28,14 @@ __all__ = [
     # Legacy compatibility
     "FormField",
     # Exceptions
-    "PDFCPUError",
-    "PDFCPUExecutionError",
-    "PDFCPUNotFoundError",
+    "PDFFormError",
     "PDFFormNotFoundError",
     "FormValidationError",
     "FieldNotFoundError",
+    # Backwards compatibility - old exception names (deprecated)
+    "PDFCPUError",
+    "PDFCPUExecutionError",
+    "PDFCPUNotFoundError",
     # Utility functions
     "get_available_geometry_backends",
     "has_geometry_support",

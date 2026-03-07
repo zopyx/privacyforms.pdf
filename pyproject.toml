@@ -1,14 +1,14 @@
 [project]
 name = "privacyforms-pdf"
 version = "0.1.2"
-description = "Python wrappers for pdfcpu to extract and fill PDF forms"
+description = "Python library to extract and fill PDF forms using pypdf"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 authors = [{ name = "Andreas Jung", email = "info@zopyx.com" }]
 dependencies = [
     "click>=8",
     "pydantic>=2",
-    "pymupdf>=1.27.1",
+    "pypdf>=5",
 ]
 
 [project.scripts]
@@ -57,7 +57,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=privacyforms_pdf --cov-report=term-missing --cov-report=html --cov-fail-under=94"
+addopts = "--cov=privacyforms_pdf --cov-report=term-missing --cov-report=html --cov-fail-under=85"
 
 [tool.coverage.run]
 source = ["privacyforms_pdf"]

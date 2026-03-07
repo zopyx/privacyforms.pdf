@@ -1,59 +1,37 @@
-"""PDF Form Extractor module using pdfcpu."""
+"""PDF Form Extractor module using pypdf."""
 
 from __future__ import annotations
 
 import json
-import logging
-import shutil
-import subprocess
-import tempfile
-from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
+from pypdf import PdfReader, PdfWriter
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
-
-logger = logging.getLogger(__name__)
+    from pypdf.generic import ArrayObject
 
 
-class PDFCPUError(Exception):
-    """Base exception for pdfcpu related errors."""
+class PDFFormError(Exception):
+    """Base exception for PDF form related errors."""
 
     pass
 
 
-class PDFCPUNotFoundError(PDFCPUError):
-    """Raised when pdfcpu is not found on the system."""
-
-    pass
-
-
-class PDFCPUExecutionError(PDFCPUError):
-    """Raised when pdfcpu execution fails."""
-
-    def __init__(self, message: str, returncode: int, stderr: str = "") -> None:
-        """Initialize the error with execution details.
-
-        Args:
-            message: Error message.
-            returncode: The return code from the process.
-            stderr: Standard error output from the process.
-        """
-        super().__init__(message)
-        self.returncode = returncode
-        self.stderr = stderr
-
-
-class PDFFormNotFoundError(PDFCPUError):
+class PDFFormNotFoundError(PDFFormError):
     """Raised when the PDF does not contain any forms."""
 
     pass
 
 
-class FormValidationError(PDFCPUError):
+class FieldNotFoundError(PDFFormError):
+    """Raised when a field is not found in the form."""
+
+    pass
+
+
+class FormValidationError(PDFFormError):
     """Raised when form data validation fails."""
 
     def __init__(self, message: str, errors: list[str] | None = None) -> None:
@@ -71,12 +49,6 @@ class FormValidationError(PDFCPUError):
         if self.errors:
             return f"{self.message}\n- " + "\n- ".join(self.errors)
         return self.message
-
-
-class FieldNotFoundError(PDFCPUError):
-    """Raised when a field is not found in the form."""
-
-    pass
 
 
 class FieldGeometry(BaseModel):
@@ -134,9 +106,6 @@ class FieldGeometry(BaseModel):
 
 class PDFField(BaseModel):
     """Unified PDF form field model with geometry and all field properties.
-
-    This Pydantic model combines form field data from pdfcpu with geometry
-    information extracted from the PDF.
 
     Attributes:
         name: The name of the field.
@@ -241,7 +210,7 @@ class PDFFormData:
         pdf_version: Version of the PDF.
         has_form: Whether the PDF contains a form.
         fields: List of PDF fields (PDFField objects).
-        raw_data: The raw JSON data from pdfcpu.
+        raw_data: The raw data from pypdf.
     """
 
     def __init__(
@@ -259,7 +228,7 @@ class PDFFormData:
             pdf_version: Version of the PDF.
             has_form: Whether the PDF contains a form.
             fields: List of PDFField objects.
-            raw_data: The raw JSON data from pdfcpu.
+            raw_data: The raw data from pypdf.
         """
         self.source = source
         self.pdf_version = pdf_version
@@ -296,14 +265,10 @@ class PDFFormData:
 
 
 class PDFFormExtractor:
-    """Extracts form information from PDF files using pdfcpu.
+    """Extracts form information from PDF files using pypdf.
 
     This class provides methods to extract form data from PDF files.
-    It wraps the pdfcpu command-line tool and provides a Pythonic interface.
-
-    Geometry extraction is automatically performed if pymupdf or pdfplumber
-    is available. You can control this behavior with the `geometry_backend`
-    parameter.
+    It uses pypdf for all operations including form extraction and filling.
 
     Example:
         >>> extractor = PDFFormExtractor()
@@ -312,127 +277,125 @@ class PDFFormExtractor:
         ...     print(f"{field.name}: {field.value}")
         ...     if field.geometry:
         ...         print(f"  Position: ({field.geometry.x}, {field.geometry.y})")
-
-    Raises:
-        PDFCPUNotFoundError: If pdfcpu is not installed on the system.
     """
 
     def __init__(
         self,
-        pdfcpu_path: str | None = None,
         timeout_seconds: float = 30.0,
-        geometry_backend: str = "auto",
+        extract_geometry: bool = True,
     ) -> None:
         """Initialize the extractor.
 
         Args:
-            pdfcpu_path: Optional path to the pdfcpu executable.
-                        If not provided, searches in system PATH.
-            timeout_seconds: Timeout for pdfcpu command execution.
-            geometry_backend: Geometry extraction backend to use.
-                Options: "auto" (try all available), "pymupdf", "pdfplumber", "none".
-
-        Raises:
-            PDFCPUNotFoundError: If pdfcpu is not found on the system.
+            timeout_seconds: Timeout for operations (kept for API compatibility).
+            extract_geometry: Whether to extract field geometry information.
         """
-        resolved_path = pdfcpu_path or self._find_pdfcpu()
-        if not resolved_path:
-            raise PDFCPUNotFoundError(
-                "pdfcpu not found. Please install pdfcpu: https://pdfcpu.io/install"
-            )
-        self._pdfcpu_path: str = resolved_path
-        self._timeout_seconds: float = timeout_seconds
-        self._geometry_backend: str = geometry_backend
+        self._timeout_seconds = timeout_seconds
+        self._extract_geometry = extract_geometry
 
     @staticmethod
-    def _find_pdfcpu() -> str | None:
-        """Find the pdfcpu executable in the system PATH.
-
-        Returns:
-            Path to pdfcpu executable, or None if not found.
-        """
-        pdfcpu = shutil.which("pdfcpu")
-        return pdfcpu
-
-    def _run_command(
-        self, args: Sequence[str], check: bool = True
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a pdfcpu command.
+    def _get_field_type(field: dict[str, Any]) -> str:
+        """Determine field type from pypdf field data.
 
         Args:
-            args: Command arguments.
-            check: Whether to check the return code.
+            field: Field dictionary from pypdf.
 
         Returns:
-            The completed process.
-
-        Raises:
-            PDFCPUExecutionError: If the command fails.
-            PDFCPUNotFoundError: If pdfcpu is not found.
+            Field type string.
         """
-        cmd: list[str] = [self._pdfcpu_path, *args]
-        try:
-            result: subprocess.CompletedProcess[str] = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self._timeout_seconds,
-            )
-            if check and result.returncode != 0:
-                stderr_msg = self._sanitize_stderr(result.stderr)
-                raise PDFCPUExecutionError(
-                    "pdfcpu command failed",
-                    result.returncode,
-                    stderr_msg,
-                )
-            return result
-        except FileNotFoundError as e:
-            raise PDFCPUNotFoundError(f"pdfcpu not found at {self._pdfcpu_path}") from e
-        except subprocess.TimeoutExpired as e:
-            raise PDFCPUExecutionError(
-                f"pdfcpu command timed out after {self._timeout_seconds:.1f}s",
-                -1,
-                self._sanitize_stderr(e.stderr),
-            ) from e
+        ft = field.get("/FT")
+        if ft is None:
+            # Try to get from field type name
+            ft = field.get("/Type")
+
+        if ft == "/Tx":
+            # Check if it's a date field
+            if "/AA" in field or "/DV" in field:
+                # Look for date format in additional actions
+                return "textfield"
+            return "textfield"
+        elif ft == "/Btn":
+            # Button can be checkbox, radio button, or push button
+            # Check for radio button group
+            if "/Opt" in field:
+                return "radiobuttongroup"
+            # Check if it's a checkbox (usually has /V as /Yes or /Off)
+            return "checkbox"
+        elif ft == "/Ch":
+            # Choice field - can be combo box or list box
+            ff = field.get("/Ff", 0)
+            if isinstance(ff, int) and ff & 0x40000:  # Combo box flag
+                return "combobox"
+            return "listbox"
+        elif ft == "/Sig":
+            return "signature"
+
+        return "textfield"  # Default fallback
 
     @staticmethod
-    def _sanitize_stderr(stderr: str | bytes | None) -> str:
-        """Return a bounded stderr string suitable for end-user messages."""
-        if stderr is None:
+    def _get_field_value(field: dict[str, Any]) -> str | bool:
+        """Extract value from pypdf field data.
+
+        Args:
+            field: Field dictionary from pypdf.
+
+        Returns:
+            Field value (string or boolean for checkboxes).
+        """
+        value = field.get("/V")
+
+        if value is None:
             return ""
-        text = stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else stderr
-        return text.strip()[:500]
 
-    @contextmanager
-    def _temporary_json_path(self) -> Iterator[Path]:
-        """Create a temporary JSON path and ensure cleanup."""
-        with tempfile.TemporaryDirectory(prefix="privacyforms_pdf_") as tmp_dir:
-            yield Path(tmp_dir) / "form.json"
+        # Handle checkbox values
+        if isinstance(value, str):
+            if value.lower() in ("/yes", "yes", "/on", "on", "1"):
+                return True
+            elif value.lower() in ("/off", "off", "no", "0"):
+                return False
+            return value
 
-    def check_pdfcpu(self) -> bool:
-        """Check if pdfcpu is available and working.
+        # Handle NameObject from pypdf
+        if hasattr(value, "name"):
+            name = value.name
+            if name.lower() in ("/yes", "yes", "/on", "on", "1"):
+                return True
+            elif name.lower() in ("/off", "off", "no", "0"):
+                return False
+            return str(name)
+
+        return str(value)
+
+    @staticmethod
+    def _get_field_options(field: dict[str, Any]) -> list[str]:
+        """Extract options for choice/radio fields.
+
+        Args:
+            field: Field dictionary from pypdf.
 
         Returns:
-            True if pdfcpu is available, False otherwise.
+            List of option strings.
         """
-        try:
-            result = self._run_command(["version"], check=False)
-            return result.returncode == 0 and "pdfcpu" in result.stdout
-        except PDFCPUError:
-            return False
+        options = field.get("/Opt", [])
+        if options:
+            return [str(opt) for opt in options]
 
-    def get_pdfcpu_version(self) -> str:
-        """Get the installed pdfcpu version.
+        # For radio buttons, check Kids
+        kids = field.get("/Kids", [])
+        if kids:
+            # Extract options from kid widgets
+            opt_list = []
+            for kid in kids:
+                kid_obj = kid.get_object() if hasattr(kid, "get_object") else kid
+                if kid_obj and "/AP" in kid_obj:
+                    ap = kid_obj["/AP"]
+                    if "/N" in ap:
+                        # Get the appearance names
+                        names = list(ap["/N"].keys())
+                        opt_list.extend([str(n) for n in names])
+            return opt_list
 
-        Returns:
-            The version string of pdfcpu.
-
-        Raises:
-            PDFCPUExecutionError: If the version command fails.
-        """
-        result = self._run_command(["version"])
-        return result.stdout.strip()
+        return []
 
     def has_form(self, pdf_path: str | Path) -> bool:
         """Check if a PDF contains a form.
@@ -442,28 +405,19 @@ class PDFFormExtractor:
 
         Returns:
             True if the PDF contains a form, False otherwise.
-
-        Raises:
-            PDFCPUExecutionError: If the pdfcpu command fails.
         """
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
 
-        result = self._run_command(["info", str(pdf_path)], check=False)
-        if result.returncode != 0:
-            raise PDFCPUExecutionError(
-                f"Failed to get PDF info for {pdf_path}",
-                result.returncode,
-                result.stderr,
-            )
-
-        return "Form: Yes" in result.stdout
+        reader = PdfReader(str(pdf_path))
+        fields = reader.get_fields()
+        return fields is not None and len(fields) > 0
 
     def extract(self, pdf_path: str | Path) -> PDFFormData:
         """Extract form data from a PDF file.
 
-        This method exports the form data from the PDF using pdfcpu and
-        parses it into a structured format. If a geometry backend is available,
+        This method extracts form data from the PDF using pypdf and
+        parses it into a structured format. If extract_geometry is True,
         field positions and sizes will also be extracted.
 
         Args:
@@ -474,68 +428,223 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
             PDFFormNotFoundError: If the PDF does not contain a form.
         """
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
 
+        reader = PdfReader(str(pdf_path))
+
         # Check if PDF has a form
-        if not self.has_form(pdf_path):
+        fields = reader.get_fields()
+        if not fields:
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
-        # Extract geometry if a backend is available
+        # Extract geometry if requested
         geometry_map: dict[str, FieldGeometry] = {}
-        if self._geometry_backend != "none":
-            try:
-                geometry_map = self._extract_geometry(pdf_path)
-            except Exception as e:  # noqa: BLE001
-                logger.debug(f"Geometry extraction failed: {e}")
+        if self._extract_geometry:
+            geometry_map = self._extract_geometry_from_pdf(reader)
 
-        with self._temporary_json_path() as tmp_path:
-            # Export form data using pdfcpu
-            result = self._run_command(
-                ["form", "export", str(pdf_path), str(tmp_path)],
-                check=False,
+        # Parse fields into PDFField objects
+        pdf_fields: list[PDFField] = []
+        raw_fields_data: dict[str, Any] = {}
+
+        for field_counter, (field_name, field_data) in enumerate(fields.items(), start=1):
+            raw_fields_data[field_name] = field_data
+
+            # Get field type
+            field_type = self._get_field_type(field_data)
+
+            # Get field value
+            value = self._get_field_value(field_data)
+
+            # Get pages (this requires scanning the document)
+            pages = self._get_field_pages(reader, field_name)
+
+            # Get options for choice fields
+            options = self._get_field_options(field_data)
+
+            # Get geometry if available
+            geometry = geometry_map.get(field_name)
+
+            # Create PDFField
+            pdf_field = PDFField(
+                name=field_name,
+                id=str(field_counter),
+                type=field_type,
+                value=value,
+                pages=pages,
+                locked=False,  # pypdf doesn't directly expose locked state
+                geometry=geometry,
+                format=None,  # Date format extraction would require additional parsing
+                options=options,
             )
-            if result.returncode != 0:
-                raise PDFCPUExecutionError(
-                    f"Failed to export form data from {pdf_path}",
-                    result.returncode,
-                    self._sanitize_stderr(result.stderr),
-                )
+            pdf_fields.append(pdf_field)
 
-            # Read and parse the exported JSON
-            with open(tmp_path, encoding="utf-8") as f:
-                raw_data: dict[str, Any] = json.load(f)
+        # Build raw data structure for compatibility
+        raw_data = self._build_raw_data_structure(pdf_fields, str(pdf_path))
 
-            return self._parse_form_data(pdf_path, raw_data, geometry_map)
+        # Get PDF version from header (e.g., "%PDF-1.7" -> "1.7")
+        if hasattr(reader, "pdf_header"):
+            pdf_version = reader.pdf_header.replace("%PDF-", "")
+        else:
+            pdf_version = "unknown"
 
-    def _extract_geometry(self, pdf_path: Path) -> dict[str, FieldGeometry]:
-        """Extract field geometry using available backends.
+        return PDFFormData(
+            source=pdf_path,
+            pdf_version=pdf_version,
+            has_form=len(pdf_fields) > 0,
+            fields=pdf_fields,
+            raw_data=raw_data,
+        )
+
+    def _get_field_pages(self, reader: PdfReader, field_name: str) -> list[int]:
+        """Find which pages contain the field widget.
 
         Args:
-            pdf_path: Path to the PDF file.
+            reader: PdfReader instance.
+            field_name: Name of the field.
+
+        Returns:
+            List of 1-based page numbers where field appears.
+        """
+        pages: list[int] = []
+
+        for page_num, page in enumerate(reader.pages, start=1):
+            if "/Annots" in page:
+                annots = cast("ArrayObject", page["/Annots"])
+                for annot_ref in annots:
+                    try:
+                        annot = (
+                            annot_ref.get_object()
+                            if hasattr(annot_ref, "get_object")
+                            else annot_ref
+                        )
+                        if annot.get("/Subtype") == "/Widget":
+                            # Get field name from T entry
+                            t_value = annot.get("/T")
+                            if t_value:
+                                name = (
+                                    str(t_value)
+                                    if isinstance(t_value, str)
+                                    else str(getattr(t_value, "name", t_value))
+                                )
+                                if name == field_name:
+                                    pages.append(page_num)
+                                    break
+                    except Exception:  # noqa: S110
+                        pass
+
+        # If no pages found, assume page 1 (common case)
+        if not pages:
+            pages = [1]
+
+        return pages
+
+    def _extract_geometry_from_pdf(self, reader: PdfReader) -> dict[str, FieldGeometry]:
+        """Extract field geometry from PDF using pypdf.
+
+        Args:
+            reader: PdfReader instance.
 
         Returns:
             Dictionary mapping field names to FieldGeometry.
         """
-        pdf_bytes = pdf_path.read_bytes()
+        geometry_map: dict[str, FieldGeometry] = {}
 
-        if self._geometry_backend == "auto":
-            # Try backends in order of preference
-            for backend_name, extractor in _GEOMETRY_BACKENDS.items():
+        for page_num, page in enumerate(reader.pages, start=1):
+            if "/Annots" not in page:
+                continue
+
+            annots = cast("ArrayObject", page["/Annots"])
+            for annot_ref in annots:
                 try:
-                    return extractor(pdf_bytes)
-                except Exception as e:  # noqa: BLE001
-                    logger.debug(f"Backend {backend_name} failed: {e}")
-                    continue
-            return {}
-        elif self._geometry_backend in _GEOMETRY_BACKENDS:
-            return _GEOMETRY_BACKENDS[self._geometry_backend](pdf_bytes)
-        else:
-            logger.warning(f"Unknown geometry backend: {self._geometry_backend}")
-            return {}
+                    annot = (
+                        annot_ref.get_object() if hasattr(annot_ref, "get_object") else annot_ref
+                    )
+
+                    # Check if it's a widget annotation
+                    if annot.get("/Subtype") != "/Widget":
+                        continue
+
+                    # Get field name
+                    t_value = annot.get("/T")
+                    if not t_value:
+                        continue
+
+                    field_name = (
+                        str(t_value)
+                        if isinstance(t_value, str)
+                        else str(getattr(t_value, "name", t_value))
+                    )
+
+                    # Get rectangle
+                    rect = annot.get("/Rect")
+                    if rect:
+                        # rect is [x0, y0, x1, y1]
+                        x0, y0, x1, y1 = [float(coord) for coord in rect]
+                        geometry_map[field_name] = FieldGeometry(
+                            page=page_num,
+                            rect=(x0, y0, x1, y1),
+                        )
+                except Exception:  # noqa: S110
+                    pass
+
+        return geometry_map
+
+    def _build_raw_data_structure(self, fields: list[PDFField], source: str) -> dict[str, Any]:
+        """Build raw data structure for export.
+
+        Args:
+            fields: List of PDFField objects.
+            source: Source PDF path.
+
+        Returns:
+            Dictionary with form data organized by field type.
+        """
+        raw_data: dict[str, Any] = {
+            "header": {"source": source, "version": "pypdf"},
+            "forms": [
+                {
+                    "textfield": [],
+                    "datefield": [],
+                    "checkbox": [],
+                    "radiobuttongroup": [],
+                    "combobox": [],
+                    "listbox": [],
+                    "signature": [],
+                }
+            ],
+        }
+
+        for field in fields:
+            field_entry: dict[str, Any] = {
+                "pages": field.pages,
+                "id": field.id,
+                "name": field.name,
+                "value": field.value,
+                "locked": field.locked,
+            }
+
+            # Add type-specific attributes
+            if field.field_type == "datefield" and field.format:
+                field_entry["format"] = field.format
+
+            if field.options and field.field_type in (
+                "radiobuttongroup",
+                "combobox",
+                "listbox",
+            ):
+                field_entry["options"] = field.options
+
+            # Add to appropriate list
+            if field.field_type in raw_data["forms"][0]:
+                raw_data["forms"][0][field.field_type].append(field_entry)
+            else:
+                # Unknown type, add as textfield
+                raw_data["forms"][0]["textfield"].append(field_entry)
+
+        return raw_data
 
     def extract_to_json(self, pdf_path: str | Path, output_path: str | Path) -> None:
         """Extract form data and save it to a JSON file.
@@ -549,7 +658,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         pdf_path = Path(pdf_path)
         output_path = Path(output_path)
@@ -573,7 +681,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         form_data = self.extract(pdf_path)
         return form_data.fields
@@ -590,7 +697,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         fields = self.list_fields(pdf_path)
         for field in fields:
@@ -610,7 +716,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         fields = self.list_fields(pdf_path)
         for field in fields:
@@ -630,7 +735,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         fields = self.list_fields(pdf_path)
         for field in fields:
@@ -662,7 +766,6 @@ class PDFFormExtractor:
 
         Raises:
             FileNotFoundError: If the PDF file does not exist.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
         """
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
@@ -703,76 +806,6 @@ class PDFFormExtractor:
 
         return errors
 
-    def _convert_to_pdfcpu_format(
-        self, pdf_path: str | Path, form_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Convert simple key:value format to pdfcpu export format.
-
-        This is an internal helper method used by fill_form.
-
-        Args:
-            pdf_path: Path to the PDF file.
-            form_data: Simple format data {"Field Name": value}.
-
-        Returns:
-            pdfcpu format data structure.
-
-        Raises:
-            FileNotFoundError: If the PDF file does not exist.
-            PDFFormNotFoundError: If the PDF does not contain a form.
-            PDFCPUExecutionError: If pdfcpu fails to process the PDF.
-        """
-        # Get form fields to determine field types
-        form_data_obj = self.extract(pdf_path)
-
-        # Build lookup by field name
-        fields_by_name = {f.name: f for f in form_data_obj.fields}
-
-        # Initialize pdfcpu format structure
-        pdfcpu_data: dict[str, Any] = {
-            "header": {
-                "source": str(pdf_path),
-                "version": "pdfcpu",
-            },
-            "forms": [
-                {
-                    "textfield": [],
-                    "datefield": [],
-                    "checkbox": [],
-                    "radiobuttongroup": [],
-                    "combobox": [],
-                    "listbox": [],
-                }
-            ],
-        }
-
-        form = pdfcpu_data["forms"][0]
-
-        for field_name, value in form_data.items():
-            field = fields_by_name.get(field_name)
-            if not field:
-                continue  # Skip unknown fields, validation will catch them
-
-            field_entry = {
-                "pages": field.pages,
-                "id": field.id,
-                "name": field.name,
-                "value": value,
-                "locked": False,
-            }
-
-            # Add type-specific attributes
-            if field.field_type == "datefield":
-                field_entry["format"] = field.format or "yyyy-m-d"  # Default format
-
-            if field.field_type == "radiobuttongroup":
-                field_entry["options"] = field.options
-
-            # Add to appropriate list
-            form[field.field_type].append(field_entry)
-
-        return pdfcpu_data
-
     def fill_form(
         self,
         pdf_path: str | Path,
@@ -790,7 +823,7 @@ class PDFFormExtractor:
             pdf_path: Path to the PDF file containing the form.
             form_data: The form data to fill (format: {"Field Name": value}).
             output_path: Optional output path. If not provided, the input PDF
-                        is modified in place (pdfcpu default behavior).
+                        is modified in place.
             validate: If True, validates form data before filling.
 
         Returns:
@@ -799,7 +832,6 @@ class PDFFormExtractor:
         Raises:
             FileNotFoundError: If the PDF file does not exist.
             FormValidationError: If validation fails and validate=True.
-            PDFCPUExecutionError: If pdfcpu fails to fill the form.
             PDFFormNotFoundError: If the PDF does not contain a form.
 
         Example:
@@ -819,29 +851,34 @@ class PDFFormExtractor:
             if errors:
                 raise FormValidationError("Form data validation failed", errors)
 
-        # Convert simple format to pdfcpu format for the fill command
-        pdfcpu_data = self._convert_to_pdfcpu_format(pdf_path, form_data)
+        # Read the PDF
+        reader = PdfReader(str(pdf_path))
+        writer = PdfWriter()
 
-        with self._temporary_json_path() as tmp_path:
-            # Write form data to temporary JSON file
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(pdfcpu_data, f, indent=2)
+        # Copy all pages and form fields
+        writer.append(reader)
 
-            # Build command arguments
-            args = ["form", "fill", str(pdf_path), str(tmp_path)]
-            if output_path:
-                args.append(str(output_path))
+        # Fill form fields - collect all values first
+        field_values = {}
+        for field_name, value in form_data.items():
+            # pypdf expects string values
+            # For checkboxes, use /Yes or /Off
+            str_value = ("/Yes" if value else "/Off") if isinstance(value, bool) else str(value)
+            field_values[field_name] = str_value
 
-            # Execute fill command
-            result = self._run_command(args, check=False)
-            if result.returncode != 0:
-                raise PDFCPUExecutionError(
-                    f"Failed to fill form in {pdf_path}",
-                    result.returncode,
-                    self._sanitize_stderr(result.stderr),
-                )
+        # Update all fields at once
+        if field_values:
+            writer.update_page_form_field_values(
+                writer.pages[0],  # Page reference (fields are updated across all pages)
+                field_values,
+            )
 
-            return Path(output_path) if output_path else pdf_path
+        # Write output
+        output_file = Path(output_path) if output_path else pdf_path
+        with open(output_file, "wb") as f:
+            writer.write(f)
+
+        return output_file
 
     def fill_form_from_json(
         self,
@@ -869,7 +906,6 @@ class PDFFormExtractor:
         Raises:
             FileNotFoundError: If any file does not exist.
             FormValidationError: If validation fails and validate=True.
-            PDFCPUExecutionError: If pdfcpu fails to fill the form.
         """
         pdf_path = Path(pdf_path)
         json_path = Path(json_path)
@@ -900,217 +936,28 @@ class PDFFormExtractor:
         if not pdf_path.is_file():
             raise FileNotFoundError(f"Path is not a file: {pdf_path}")
 
-    def _parse_form_data(
-        self,
-        pdf_path: Path,
-        raw_data: dict[str, Any],
-        geometry_map: dict[str, FieldGeometry] | None = None,
-    ) -> PDFFormData:
-        """Parse raw form data from pdfcpu into structured format.
-
-        Args:
-            pdf_path: Path to the PDF file.
-            raw_data: Raw JSON data from pdfcpu.
-            geometry_map: Optional mapping of field names to geometry.
-
-        Returns:
-            Parsed PDFFormData object with PDFField instances.
-        """
-        header = raw_data.get("header", {})
-        pdf_version = header.get("version", "unknown")
-
-        fields: list[PDFField] = []
-        geometry_map = geometry_map or {}
-
-        forms = raw_data.get("forms", [])
-        if forms:
-            form = forms[0]
-
-            # Process each field type
-            field_types = [
-                "textfield",
-                "datefield",
-                "checkbox",
-                "radiobuttongroup",
-                "combobox",
-                "listbox",
-            ]
-
-            for field_type in field_types:
-                for field_data in form.get(field_type, []):
-                    field_name = field_data.get("name", "")
-
-                    # Extract type-specific attributes
-                    format_str = field_data.get("format") if field_type == "datefield" else None
-                    options = (
-                        field_data.get("options", [])
-                        if field_type in ("radiobuttongroup", "combobox", "listbox")
-                        else []
-                    )
-
-                    # Get geometry for this field if available
-                    geometry = geometry_map.get(field_name)
-
-                    field = PDFField(
-                        name=field_name,
-                        id=str(field_data.get("id", "")),
-                        type=field_type,
-                        value=field_data.get("value", ""),
-                        pages=field_data.get("pages", []),
-                        locked=field_data.get("locked", False),
-                        geometry=geometry,
-                        format=format_str,
-                        options=options if isinstance(options, list) else [],
-                    )
-                    fields.append(field)
-
-        return PDFFormData(
-            source=pdf_path,
-            pdf_version=pdf_version,
-            has_form=len(fields) > 0,
-            fields=fields,
-            raw_data=raw_data,
-        )
-
-
-# Geometry extraction backends
-_GEOMETRY_BACKENDS: dict[str, callable] = {}  # type: ignore[type-arg]
-
-
-def _extract_with_pymupdf(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
-    """Extract geometry using PyMuPDF (fitz).
-
-    PyMuPDF provides the most accurate and fastest geometry extraction.
-    It directly accesses PDF annotation/widget structures.
-
-    Args:
-        pdf_bytes: PDF file content.
-
-    Returns:
-        Dictionary mapping field names to FieldGeometry.
-    """
-    import fitz  # pymupdf - optional dependency
-
-    geometry_map: dict[str, FieldGeometry] = {}
-
-    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            # Get all form widgets on this page
-            widgets = page.widgets()
-            if not widgets:
-                continue
-
-            for widget in widgets:
-                field_name = widget.field_name
-                if not field_name:
-                    continue
-
-                # Get bounding rectangle in PDF coordinates
-                # fitz.Rect: (x0, y0, x1, y1) where y increases upward
-                rect = widget.rect
-
-                geometry_map[field_name] = FieldGeometry(
-                    page=page_num + 1,  # Convert 0-based to 1-based
-                    rect=(rect.x0, rect.y0, rect.x1, rect.y1),
-                )
-
-    return geometry_map
-
-
-def _extract_with_pdfplumber(pdf_bytes: bytes) -> dict[str, FieldGeometry]:  # pragma: no cover
-    """Extract geometry using pdfplumber.
-
-    pdfplumber is a pure-Python alternative that uses pdfminer.six.
-    Slower than pymupdf but has MIT license and no compiled dependencies.
-
-    Args:
-        pdf_bytes: PDF file content.
-
-    Returns:
-        Dictionary mapping field names to FieldGeometry.
-    """
-    import io
-
-    import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
-
-    geometry_map: dict[str, FieldGeometry] = {}
-
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page_num, page in enumerate(pdf.pages, start=1):
-            # Get form fields from annotations
-            annots = page.annots
-            if not annots:
-                continue
-
-            for annot in annots:
-                # Only process Widget annotations (form fields)
-                annot_data = annot.get("data", {})
-                subtype = annot_data.get("Subtype")
-                # Subtype is a PSLiteral, convert to string for comparison
-                if str(subtype) != "/'Widget'":
-                    continue
-
-                # Get field name from the annotation data
-                field_name_bytes = annot_data.get("T")
-                if not field_name_bytes:
-                    continue
-
-                # Decode field name (it's bytes)
-                if isinstance(field_name_bytes, bytes):
-                    field_name = field_name_bytes.decode("utf-8", errors="replace")
-                else:
-                    field_name = str(field_name_bytes)
-
-                if not field_name:
-                    continue
-
-                # Get bounding box coordinates from annotation
-                # pdfplumber provides x0, y0, x1, y1 directly on the annot
-                x0 = annot.get("x0", 0.0)
-                y0 = annot.get("y0", 0.0)
-                x1 = annot.get("x1", 0.0)
-                y1 = annot.get("y1", 0.0)
-
-                geometry_map[field_name] = FieldGeometry(
-                    page=page_num,
-                    rect=(float(x0), float(y0), float(x1), float(y1)),
-                )
-
-    return geometry_map
-
-
-# Auto-register available backends on module load
-try:
-    import fitz  # noqa: F401  # optional dependency
-
-    _GEOMETRY_BACKENDS["pymupdf"] = _extract_with_pymupdf
-    logger.debug("Registered geometry backend: pymupdf")
-except ImportError:
-    logger.debug("PyMuPDF (pymupdf) not available for geometry extraction")
-
-try:  # pragma: no cover
-    import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
-
-    _GEOMETRY_BACKENDS["pdfplumber"] = _extract_with_pdfplumber
-    logger.debug("Registered geometry backend: pdfplumber")
-except ImportError:
-    logger.debug("pdfplumber not available for geometry extraction")
-
 
 def get_available_geometry_backends() -> list[str]:
     """Return list of available geometry backends.
 
     Returns:
         List of backend names that can be used.
+        For pypdf version, always returns ["pypdf"].
     """
-    return list(_GEOMETRY_BACKENDS.keys())
+    return ["pypdf"]
 
 
 def has_geometry_support() -> bool:
     """Check if any geometry extraction backend is available.
 
     Returns:
-        True if at least one backend is installed and available.
+        True (pypdf always supports geometry extraction).
     """
-    return len(_GEOMETRY_BACKENDS) > 0
+    return True
+
+
+# Backwards compatibility aliases (deprecated, will be removed in a future version)
+# These aliases exist for code that was written for earlier versions using pdfcpu
+PDFCPUError = PDFFormError
+PDFCPUNotFoundError = PDFFormError
+PDFCPUExecutionError = PDFFormError

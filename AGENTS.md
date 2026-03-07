@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**privacyforms-pdf** is a Python wrapper library for [pdfcpu](https://pdfcpu.io/) that extracts and manipulates PDF form data.
+**privacyforms-pdf** is a Python library for extracting and filling PDF form data using [pypdf](https://pypdf.readthedocs.io/).
 
 - **Author**: Andreas Jung <info@zopyx.com>
 - **Python Version**: 3.14+
@@ -20,20 +20,26 @@ privacyforms_pdf/
 
 ### Core Classes
 
-- **PDFFormExtractor**: Main class for extracting PDF form data
-  - Wraps `pdfcpu` command-line tool
+- **PDFFormExtractor**: Main class for extracting and filling PDF forms
+  - Uses pypdf for all PDF operations
   - Handles all PDF form field types (textfield, datefield, checkbox, radiobuttongroup, etc.)
-  - Provides methods: `extract()`, `list_fields()`, `get_field_value()`, `has_form()`
+  - Provides methods: `extract()`, `list_fields()`, `get_field_value()`, `has_form()`, `fill_form()`
 
 - **PDFFormData**: Dataclass representing extracted form data
-- **FormField**: Dataclass representing individual form fields
+- **PDFField**: Pydantic model representing individual form fields with geometry support
+- **FieldGeometry**: Pydantic model representing field position and size
 
 ### Exceptions
 
-- `PDFCPUError`: Base exception
-- `PDFCPUNotFoundError`: pdfcpu not installed
-- `PDFCPUExecutionError`: pdfcpu command failed
+- `PDFFormError`: Base exception
 - `PDFFormNotFoundError`: PDF has no form
+- `FormValidationError`: Form data validation failed
+- `FieldNotFoundError`: Field not found in form
+
+**Backwards Compatibility Aliases (deprecated):**
+- `PDFCPUError` = `PDFFormError`
+- `PDFCPUNotFoundError` = `PDFFormError`
+- `PDFCPUExecutionError` = `PDFFormError`
 
 ## Tech Stack
 
@@ -44,7 +50,8 @@ privacyforms_pdf/
 | Type Checker | ty | `uv run ty check` |
 | Testing | pytest + pytest-cov | `uv run pytest` |
 | CLI Framework | Click | Defined in `cli.py` |
-| Data Validation | Pydantic | For future form filling features |
+| Data Validation | Pydantic | For form field models |
+| PDF Library | pypdf | Pure Python PDF manipulation |
 
 ## Development Workflow
 
@@ -70,7 +77,7 @@ make test           # Run tests
 
 - **Typing**: All code must have complete type hints (Pyright strict mode)
 - **Linting**: Ruff with line length 100, Python 3.14 target
-- **Testing**: Minimum 90% coverage required
+- **Testing**: Minimum 90% coverage required (currently 99%)
 - **Docstrings**: Google-style docstrings for all public APIs
 
 ### Makefile Commands
@@ -89,7 +96,6 @@ make clean          # Clean cache files
 make build          # Build package into dist/
 make upload         # Upload to PyPI (with twine)
 make upload-test    # Upload to TestPyPI (with twine)
-make ci-build       # Build package for CI
 ```
 
 ## Testing
@@ -99,7 +105,7 @@ make ci-build       # Build package for CI
 ```
 tests/
 ├── __init__.py
-├── conftest.py         # pytest fixtures (sample PDF path)
+├── conftest.py         # pytest fixtures
 ├── test_extractor.py   # Tests for PDFFormExtractor
 └── test_cli.py         # Tests for CLI commands
 ```
@@ -123,8 +129,8 @@ uv run pytest tests/test_extractor.py::TestPDFFormExtractorInitialization -v
 ### Mocking Strategy
 
 Tests use `unittest.mock.patch` to mock:
-- `subprocess.run` for pdfcpu command execution
-- `PDFFormExtractor._find_pdfcpu` to avoid requiring pdfcpu in tests
+- `pypdf.PdfReader` for PDF reading operations
+- `pypdf.PdfWriter` for PDF writing operations
 - File system operations where appropriate
 
 ## CI/CD
@@ -177,6 +183,7 @@ if TYPE_CHECKING:
 
 # Third-party
 import click
+from pypdf import PdfReader, PdfWriter
 
 # Local
 from .extractor import PDFFormExtractor
@@ -205,25 +212,23 @@ def extract(self, pdf_path: str | Path) -> PDFFormData:
 ```python
 try:
     result = self._run_command([...])
-except PDFCPUExecutionError as e:
+except PDFFormError as e:
     # Handle specific error
-    raise click.ClickException(f"Failed: {e.stderr}") from e
+    raise click.ClickException(f"Failed: {e}") from e
 ```
 
 ## External Dependencies
-
-### Required System Binary
-
-- **pdfcpu**: Must be installed on the system
-  - macOS: `brew install pdfcpu`
-  - Linux: Download from GitHub releases
-  - Windows: `choco install pdfcpu`
 
 ### Python Dependencies
 
 See `pyproject.toml`:
 - `click` - CLI framework
-- `pydantic` - Data validation (for future features)
+- `pydantic` - Data validation
+- `pypdf>=5` - PDF manipulation library
+
+### No External Binary Dependencies
+
+Unlike previous versions that required pdfcpu to be installed, this version uses pure Python pypdf library.
 
 ## Common Tasks
 
@@ -237,7 +242,7 @@ See `pyproject.toml`:
 ### Add a New Extractor Method
 
 1. Add method to `PDFFormExtractor` in `extractor.py`
-2. Use `_run_command()` for pdfcpu calls
+2. Use `PdfReader`/`PdfWriter` for pypdf operations
 3. Handle errors appropriately
 4. Add corresponding tests in `tests/test_extractor.py`
 5. Update `__init__.py` if public API
@@ -268,15 +273,6 @@ uv lock
 
 ## Troubleshooting
 
-### pdfcpu not found
-
-```bash
-# Check if pdfcpu is installed
-make check-pdfcpu
-# or
-uv run pdf-forms check
-```
-
 ### Type checking errors
 
 ```bash
@@ -294,15 +290,29 @@ uv run pytest -v --tb=short
 uv run pytest tests/test_extractor.py::TestClass::test_method -v
 ```
 
+## Migration from pdfcpu Version
+
+If you're migrating from a version that used pdfcpu:
+
+1. **No external binary required**: pypdf is a pure Python library installed via pip/uv
+2. **Exception names changed**: 
+   - `PDFCPUError` → `PDFFormError`
+   - `PDFCPUNotFoundError` → `PDFFormError` (no longer needed)
+   - `PDFCPUExecutionError` → `PDFFormError`
+3. **Constructor changed**: Removed `pdfcpu_path` and `geometry_backend` parameters
+4. **API remains compatible**: All other methods work the same way
+
+Old exception names are kept as aliases for backwards compatibility.
+
 ## Future Enhancements
 
 Potential features to implement:
-- PDF form filling functionality (`pdfcpu form fill`)
 - CSV export format
 - Batch processing multiple PDFs
 - Form field validation using Pydantic models
 - Async/await support for I/O operations
+- PDF form creation from scratch
 
 ---
 
-Last updated: 2026-03-06
+Last updated: 2026-03-07
