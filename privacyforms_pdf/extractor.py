@@ -1032,7 +1032,7 @@ def _extract_with_pdfplumber(pdf_bytes: bytes) -> dict[str, FieldGeometry]:
     """
     import io
 
-    import pdfplumber  # noqa: F401
+    import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
 
     geometry_map: dict[str, FieldGeometry] = {}
 
@@ -1090,7 +1090,7 @@ except ImportError:
     logger.debug("PyMuPDF (pymupdf) not available for geometry extraction")
 
 try:
-    import pdfplumber  # noqa: F401
+    import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
 
     _GEOMETRY_BACKENDS["pdfplumber"] = _extract_with_pdfplumber
     logger.debug("Registered geometry backend: pdfplumber")
