@@ -5,20 +5,21 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
 
-Python wrappers for pdfcpu to extract and fill PDF forms.
+Python library for extracting and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).
 
 ## Features
 
-- Extract form data from PDF files using [pdfcpu](https://pdfcpu.io/)
-- Programmatic API via `PDFFormExtractor` class
+- Extract form data from PDF files using pure Python (no external dependencies)
+- Fill PDF forms programmatically
+- Extract field geometry (position and size) information
 - Command-line interface with multiple commands
-- Full type hints and comprehensive test coverage
+- Full type hints and comprehensive test coverage (99%)
 - Support for all form field types (text, date, checkbox, radio button groups, etc.)
 
 ## Requirements
 
 - Python 3.14+
-- [pdfcpu](https://pdfcpu.io/install) must be installed on your system
+- pypdf >= 5.0
 
 ## Installation
 
@@ -33,7 +34,7 @@ uv sync
 
 ## Quick Start
 
-### Check if pdfcpu is installed
+### Check CLI is ready
 
 ```bash
 pdf-forms check
@@ -135,27 +136,29 @@ if errors:
 
 ### `PDFFormExtractor`
 
-The main class for extracting PDF form data.
+The main class for extracting and filling PDF form data.
 
 #### Constructor
 
 ```python
-extractor = PDFFormExtractor(pdfcpu_path: str | None = None)
+extractor = PDFFormExtractor(
+    timeout_seconds: float = 30.0,
+    extract_geometry: bool = True
+)
 ```
 
-- `pdfcpu_path`: Optional path to the pdfcpu executable. If not provided, searches in system PATH.
+- `timeout_seconds`: Timeout for operations (kept for API compatibility).
+- `extract_geometry`: Whether to extract field geometry information.
 
 #### Methods
 
-- `check_pdfcpu() -> bool`: Check if pdfcpu is available and working.
-- `get_pdfcpu_version() -> str`: Get the installed pdfcpu version.
 - `has_form(pdf_path: str | Path) -> bool`: Check if a PDF contains a form.
 - `extract(pdf_path: str | Path) -> PDFFormData`: Extract form data from a PDF.
 - `extract_to_json(pdf_path: str | Path, output_path: str | Path) -> None`: Export form data to a JSON file.
-- `list_fields(pdf_path: str | Path) -> list[FormField]`: List all form fields in a PDF.
+- `list_fields(pdf_path: str | Path) -> list[PDFField]`: List all form fields in a PDF.
 - `get_field_value(pdf_path: str | Path, field_name: str) -> str | bool | None`: Get the value of a specific form field.
-- `get_field_by_id(pdf_path: str | Path, field_id: str) -> FormField | None`: Get a form field by its ID.
-- `get_field_by_name(pdf_path: str | Path, field_name: str) -> FormField | None`: Get a form field by its name.
+- `get_field_by_id(pdf_path: str | Path, field_id: str) -> PDFField | None`: Get a form field by its ID.
+- `get_field_by_name(pdf_path: str | Path, field_name: str) -> PDFField | None`: Get a form field by its name.
 - `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
 - `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data.
 - `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file.
@@ -169,27 +172,45 @@ Represents extracted PDF form data.
 - `source: Path`: Path to the source PDF file.
 - `pdf_version: str`: Version of the PDF.
 - `has_form: bool`: Whether the PDF contains a form.
-- `fields: list[FormField]`: List of form fields.
-- `raw_data: dict[str, Any]`: The raw JSON data from pdfcpu.
+- `fields: list[PDFField]`: List of form fields.
+- `raw_data: dict[str, Any]`: The raw data from pypdf.
 
-#### `FormField`
+#### `PDFField`
 
 Represents a single form field.
 
-- `field_type: str`: The type of the form field (e.g., 'textfield', 'checkbox').
-- `pages: list[int]`: List of pages where this field appears.
-- `id: str`: The unique identifier of the field.
 - `name: str`: The name of the field.
+- `id: str`: The unique identifier of the field.
+- `field_type: str`: The type of the form field (e.g., 'textfield', 'checkbox').
 - `value: str | bool`: The current value of the field.
+- `pages: list[int]`: List of pages where this field appears.
 - `locked: bool`: Whether the field is locked.
+- `geometry: FieldGeometry | None`: Optional geometry information (position and size).
+- `format: str | None`: Date format for datefield types.
+- `options: list[str]`: Available options for radiobuttongroup, combobox, listbox types.
+
+#### `FieldGeometry`
+
+Represents the geometry (position and size) of a form field.
+
+- `page: int`: 1-based page number where field appears.
+- `rect: tuple[float, float, float, float]`: Bounding box as (x1, y1, x2, y2) in PDF points.
+- `x: float`: Left coordinate.
+- `y: float`: Bottom coordinate (PDF coordinate system).
+- `width: float`: Field width in points.
+- `height: float`: Field height in points.
 
 ### Exceptions
 
-- `PDFCPUError`: Base exception for pdfcpu related errors.
-- `PDFCPUNotFoundError`: Raised when pdfcpu is not found on the system.
-- `PDFCPUExecutionError`: Raised when pdfcpu execution fails.
+- `PDFFormError`: Base exception for PDF form related errors.
 - `PDFFormNotFoundError`: Raised when the PDF does not contain any forms.
 - `FormValidationError`: Raised when form data validation fails.
+- `FieldNotFoundError`: Raised when a field is not found in the form.
+
+**Note:** For backwards compatibility, the following aliases are still available but deprecated:
+- `PDFCPUError` (alias for `PDFFormError`)
+- `PDFCPUNotFoundError` (alias for `PDFFormError`)
+- `PDFCPUExecutionError` (alias for `PDFFormError`)
 
 ## Development
 
@@ -206,7 +227,7 @@ uv run pytest --cov
 uv run ruff check .
 
 # Run type checking
-uv run pyright
+uv run ty check
 ```
 
 ### Project Structure

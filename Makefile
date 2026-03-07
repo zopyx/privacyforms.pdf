@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint format type-check check clean run check-pdfcpu ci-build build upload upload-test release
+.PHONY: help install install-dev test test-cov lint format type-check check clean run build upload upload-test release ci
 
 VERSION := $(shell uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 TAG ?= v$(VERSION)
@@ -17,13 +17,11 @@ help:
 	@echo "  check        - Run all checks (lint, format-check, type-check)"
 	@echo "  fix          - Fix auto-fixable issues (ruff check --fix)"
 	@echo "  clean        - Clean build artifacts and cache files"
-	@echo "  check-pdfcpu - Check if pdfcpu is installed"
 	@echo "  run          - Run the CLI (use ARGS='<args>')"
 	@echo "  build        - Build package artifacts into dist/"
 	@echo "  upload       - Upload built package to PyPI"
 	@echo "  upload-test  - Upload built package to TestPyPI"
 	@echo "  release      - Run checks/tests, build, tag, and push release"
-	@echo "  ci-build     - Build package for CI/CD (no pdfcpu required)"
 	@echo "  ci           - Run all CI checks (check + test + build)"
 
 # Installation
@@ -76,10 +74,6 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
-# Utility
-check-pdfcpu:
-	uv run pdf-forms check
-
 # Run CLI with arguments (e.g., make run ARGS='info samples/FilledForm.pdf')
 run:
 	uv run pdf-forms $(ARGS)
@@ -89,11 +83,9 @@ dev-setup: install-dev
 	@echo "Development environment ready!"
 	@echo "Run 'make check' to verify everything is working"
 
-# CI/CD
-ci-build:
+# Build
+build:
 	uv build
-
-build: ci-build
 	@echo "Build artifacts created in dist/"
 
 upload: check
@@ -113,5 +105,5 @@ release: check test build
 	@echo "Release $(TAG) created and pushed."
 	@echo "Run 'make upload' to publish to PyPI."
 
-ci: check test ci-build
+ci: check test build
 	@echo "CI checks passed!"

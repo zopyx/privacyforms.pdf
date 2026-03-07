@@ -3,85 +3,50 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import click
 
 from .extractor import (
     FormValidationError,
-    PDFCPUError,
-    PDFCPUExecutionError,
+    PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
 )
 
 
-def create_extractor(geometry_backend: str = "auto") -> PDFFormExtractor:
+def create_extractor(extract_geometry: bool = True) -> PDFFormExtractor:  # noqa: ARG001
     """Create a PDFFormExtractor instance, handling errors gracefully.
 
     Args:
-        geometry_backend: Geometry extraction backend to use.
+        extract_geometry: Whether to extract field geometry.
 
     Returns:
         Configured PDFFormExtractor instance.
-
-    Raises:
-        click.ClickException: If pdfcpu is not found.
     """
-    try:
-        return PDFFormExtractor(geometry_backend=geometry_backend)
-    except PDFCPUError as e:
-        raise click.ClickException(str(e)) from e
+    # pypdf is always available, no external dependencies to check
+    return PDFFormExtractor(extract_geometry=extract_geometry)
 
 
 @click.group()
 @click.version_option(version="0.1.2", prog_name="pdf-forms")
-@click.option(
-    "--geometry-backend",
-    type=click.Choice(["auto", "pymupdf", "pdfplumber", "none"], case_sensitive=False),
-    default="auto",
-    help="Geometry extraction backend (default: auto)",
-)
 @click.pass_context
-def main(ctx: click.Context, geometry_backend: str) -> None:
-    """PDF Form extraction and manipulation tools using pdfcpu.
+def main(ctx: click.Context) -> None:
+    """PDF Form extraction and manipulation tools using pypdf.
 
     This CLI provides commands to extract, list, and fill PDF forms.
-    Requires pdfcpu to be installed on your system.
-
-    Geometry extraction (field positions and sizes) is automatically
-    performed if pymupdf or pdfplumber is installed.
-
-    Visit https://pdfcpu.io/install for installation instructions.
+    Uses pypdf library for all operations.
     """
-    # Store geometry_backend in context for subcommands
+    # Store context for subcommands
     ctx.ensure_object(dict)
-    ctx.obj["geometry_backend"] = geometry_backend
 
 
 @main.command()
 @click.pass_context
-def check(ctx: click.Context) -> None:
-    """Check if pdfcpu is installed and working."""
-    try:
-        geometry_backend = ctx.obj["geometry_backend"]
-        extractor = PDFFormExtractor(geometry_backend=geometry_backend)
-        version = extractor.get_pdfcpu_version()
-        click.echo(f"✓ pdfcpu is installed: {version}")
-
-        # Check geometry support
-        from .extractor import get_available_geometry_backends
-
-        backends = get_available_geometry_backends()
-        if backends:
-            click.echo(f"✓ Geometry extraction available: {', '.join(backends)}")
-        else:
-            click.echo("ℹ Geometry extraction not available (install pymupdf or pdfplumber)")
-    except PDFCPUError as e:
-        click.echo(f"✗ pdfcpu not found: {e}", err=True)
-        click.echo("Please install pdfcpu: https://pdfcpu.io/install", err=True)
-        sys.exit(1)
+def check(ctx: click.Context) -> None:  # noqa: ARG001
+    """Check if the CLI is properly installed."""
+    click.echo("✓ pdf-forms CLI is ready")
+    click.echo("✓ Using pypdf for PDF form operations")
 
 
 @main.command()
@@ -95,7 +60,7 @@ def check(ctx: click.Context) -> None:
 @click.option(
     "--raw/--unified",
     default=False,
-    help="Output raw pdfcpu data (default: unified PDFField format)",
+    help="Output raw pypdf data (default: unified PDFField format)",
 )
 @click.pass_context
 def extract(ctx: click.Context, pdf_path: Path, output: Path | None, raw: bool) -> None:
@@ -108,13 +73,14 @@ def extract(ctx: click.Context, pdf_path: Path, output: Path | None, raw: bool) 
         pdf-forms extract form.pdf -o data.json
         pdf-forms extract form.pdf --raw -o raw.json
     """
-    geometry_backend = ctx.obj["geometry_backend"]
-    extractor = create_extractor(geometry_backend)
+    extractor = create_extractor()
 
     try:
         if raw and output:
-            # Raw mode: use pdfcpu's native export
-            extractor.extract_to_json(pdf_path, output)
+            # Raw mode: write raw data
+            form_data = extractor.extract(pdf_path)
+            with open(output, "w", encoding="utf-8") as f:
+                json.dump(form_data.raw_data, f, indent=2)
             click.echo(f"Raw form data extracted to: {output}")
         elif raw:
             # Raw mode to stdout
@@ -133,7 +99,7 @@ def extract(ctx: click.Context, pdf_path: Path, output: Path | None, raw: bool) 
             click.echo(form_data.to_json())
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
-    except PDFCPUExecutionError as e:
+    except PDFFormError as e:
         raise click.ClickException("Failed to extract form.") from e
 
 
@@ -145,7 +111,7 @@ def extract(ctx: click.Context, pdf_path: Path, output: Path | None, raw: bool) 
     help="Show geometry information (default: true)",
 )
 @click.pass_context
-def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:
+def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:  # noqa: ARG001
     """List all form fields in a PDF file.
 
     PDF_PATH is the path to the PDF file to process.
@@ -154,11 +120,7 @@ def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:
         pdf-forms list-fields form.pdf
         pdf-forms list-fields form.pdf --no-geometry
     """
-    geometry_backend = ctx.obj["geometry_backend"]
-    if not geometry:
-        geometry_backend = "none"
-
-    extractor = create_extractor(geometry_backend)
+    extractor = create_extractor(extract_geometry=geometry)
 
     try:
         fields = extractor.list_fields(pdf_path)
@@ -199,7 +161,7 @@ def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:
 
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
-    except PDFCPUExecutionError as e:
+    except PDFFormError as e:
         raise click.ClickException("Failed to list fields.") from e
 
 
@@ -207,7 +169,7 @@ def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:
 @click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
 @click.argument("field_name")
 @click.pass_context
-def get_value(ctx: click.Context, pdf_path: Path, field_name: str) -> None:
+def get_value(ctx: click.Context, pdf_path: Path, field_name: str) -> None:  # noqa: ARG001
     """Get the value of a specific form field.
 
     PDF_PATH is the path to the PDF file to process.
@@ -216,8 +178,7 @@ def get_value(ctx: click.Context, pdf_path: Path, field_name: str) -> None:
     Example:
         pdf-forms get-value form.pdf "Candidate Name"
     """
-    geometry_backend = ctx.obj["geometry_backend"]
-    extractor = create_extractor(geometry_backend)
+    extractor = create_extractor()
 
     try:
         value = extractor.get_field_value(pdf_path, field_name)
@@ -229,14 +190,14 @@ def get_value(ctx: click.Context, pdf_path: Path, field_name: str) -> None:
 
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
-    except PDFCPUExecutionError as e:
+    except PDFFormError as e:
         raise click.ClickException("Failed to get field value.") from e
 
 
 @main.command()
 @click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
 @click.pass_context
-def info(ctx: click.Context, pdf_path: Path) -> None:
+def info(ctx: click.Context, pdf_path: Path) -> None:  # noqa: ARG001
     """Check if a PDF contains a form.
 
     PDF_PATH is the path to the PDF file to process.
@@ -244,8 +205,7 @@ def info(ctx: click.Context, pdf_path: Path) -> None:
     Example:
         pdf-forms info form.pdf
     """
-    geometry_backend = ctx.obj["geometry_backend"]
-    extractor = create_extractor(geometry_backend)
+    extractor = create_extractor()
 
     try:
         has_form = extractor.has_form(pdf_path)
@@ -253,7 +213,7 @@ def info(ctx: click.Context, pdf_path: Path) -> None:
             click.echo(f"✓ {pdf_path} contains a form")
         else:
             click.echo(f"✗ {pdf_path} does not contain a form")
-    except PDFCPUExecutionError as e:
+    except PDFFormError as e:
         raise click.ClickException("Failed to get form info.") from e
 
 
@@ -278,7 +238,7 @@ def info(ctx: click.Context, pdf_path: Path) -> None:
 )
 @click.pass_context
 def fill_form(
-    ctx: click.Context,
+    ctx: click.Context,  # noqa: ARG001
     pdf_path: Path,
     json_path: Path,
     output: Path | None,
@@ -300,8 +260,7 @@ def fill_form(
         pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
         pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
     """
-    geometry_backend = ctx.obj["geometry_backend"]
-    extractor = create_extractor(geometry_backend)
+    extractor = create_extractor()
 
     try:
         # Read and parse JSON
@@ -333,7 +292,7 @@ def fill_form(
         raise click.ClickException(str(e)) from e
     except FormValidationError as e:
         raise click.ClickException(str(e)) from e
-    except PDFCPUExecutionError as e:
+    except PDFFormError as e:
         raise click.ClickException("Failed to fill form.") from e
     except json.JSONDecodeError as e:
         raise click.ClickException(f"Invalid JSON file: {e}") from e
