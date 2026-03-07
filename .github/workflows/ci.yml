@@ -23,16 +23,16 @@ jobs:
           version: "0.6.x"
 
       - name: Install Python
-        run: uv python install
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --python 3.13
 
       - name: Run linter
-        run: uv run ruff check privacyforms_pdf tests
+        run: uv run --python 3.13 ruff check privacyforms_pdf tests
 
       - name: Check formatting
-        run: uv run ruff format --check privacyforms_pdf tests
+        run: uv run --python 3.13 ruff format --check privacyforms_pdf tests
 
   type-check:
     name: Type Check
@@ -46,13 +46,13 @@ jobs:
           version: "0.6.x"
 
       - name: Install Python
-        run: uv python install
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --python 3.13
 
       - name: Run type checker
-        run: uv run ty check
+        run: uv run --python 3.13 ty check
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -72,7 +72,7 @@ jobs:
           version: "0.6.x"
 
       - name: Install Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }} --reinstall
 
       - name: Install dependencies
         run: uv sync --group dev --python ${{ matrix.python-version }}
