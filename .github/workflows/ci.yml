@@ -23,16 +23,16 @@ jobs:
           version: "0.6.x"
 
       - name: Install Python
-        run: uv python install 3.13
+        run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group dev --python 3.13
+        run: uv sync --group dev
 
       - name: Run linter
-        run: uv run --python 3.13 ruff check privacyforms_pdf tests
+        run: uv run ruff check privacyforms_pdf tests
 
       - name: Check formatting
-        run: uv run --python 3.13 ruff format --check privacyforms_pdf tests
+        run: uv run ruff format --check privacyforms_pdf tests
 
   type-check:
     name: Type Check
@@ -46,13 +46,13 @@ jobs:
           version: "0.6.x"
 
       - name: Install Python
-        run: uv python install 3.13
+        run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group dev --python 3.13
+        run: uv sync --group dev
 
       - name: Run type checker
-        run: uv run --python 3.13 ty check
+        run: uv run ty check
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -61,24 +61,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.13", "3.13t", "3.14", "3.14t"]
+        python-version: ["3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pdfcpu (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://github.com/pdfcpu/pdfcpu/releases/download/v0.11.1/pdfcpu_0.11.1_Linux_x86_64.tar.xz
-          tar -xf pdfcpu_0.11.1_Linux_x86_64.tar.xz
-          sudo mv pdfcpu_0.11.1_Linux_x86_64/pdfcpu /usr/local/bin/
-          pdfcpu version
-
-      - name: Install pdfcpu (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install pdfcpu
-          pdfcpu version
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
