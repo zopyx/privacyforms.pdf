@@ -299,4 +299,4 @@ privacyforms-pdf/
 
 ## License
 
-Copyright 2025 Andreas Jung (info@zopyx.com)
+Copyright 2026 Andreas Jung (info@zopyx.com)

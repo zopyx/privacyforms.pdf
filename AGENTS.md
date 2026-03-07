@@ -315,4 +315,4 @@ Potential features to implement:
 
 ---
 
-Last updated: 2026-03-07
+Last updated: 2026-03-07 (v0.1.3)

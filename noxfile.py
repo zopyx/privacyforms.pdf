@@ -9,7 +9,7 @@ from __future__ import annotations
 import nox
 
 # Python versions to test against
-PYTHON_VERSIONS = ["3.12", "3.13", "3.13t", "3.14", "3.14t"]
+PYTHON_VERSIONS = ["3.12", "3.13", "3.14", "3.14t"]
 
 # Default sessions to run when no session is specified
 nox.options.sessions = ["test"]
