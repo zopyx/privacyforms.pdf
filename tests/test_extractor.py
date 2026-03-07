@@ -1340,6 +1340,88 @@ class TestExtractGeometryEdgeCases:
         assert result == {}
 
 
+class TestExtractAllSamplePdfs:
+    """Tests for extracting form data from all sample PDFs."""
+
+    def test_extract_filledform_pdf(self) -> None:
+        """Test extracting form data from FilledForm.pdf."""
+        from pathlib import Path
+
+        pdf_path = Path("samples/FilledForm.pdf")
+        if not pdf_path.exists():
+            pytest.skip("FilledForm.pdf not found")
+
+        extractor = PDFFormExtractor()
+        form_data = extractor.extract(pdf_path)
+
+        assert form_data.has_form is True
+        assert len(form_data.fields) > 0
+        assert form_data.source == pdf_path
+
+        # Check for expected fields
+        field_names = {f.name for f in form_data.fields}
+        assert "Candidate Name" in field_names
+        assert "Home phone number" in field_names
+
+    def test_extract_bescheinigung_pdf(self) -> None:
+        """Test extracting form data from Bescheinigung PDF."""
+        from pathlib import Path
+
+        pdf_path = Path("samples/Bescheinigung_ueber_die_Anrechnung_von_Studienzeiten.pdf")
+        if not pdf_path.exists():
+            pytest.skip("Bescheinigung PDF not found")
+
+        extractor = PDFFormExtractor()
+
+        # This PDF may or may not have a form
+        has_form = extractor.has_form(pdf_path)
+
+        if has_form:
+            form_data = extractor.extract(pdf_path)
+            assert isinstance(form_data.fields, list)
+        else:
+            with pytest.raises(PDFFormNotFoundError):
+                extractor.extract(pdf_path)
+
+    def test_extract_formloser_antrag_pdf(self) -> None:
+        """Test extracting form data from Formloser-Antrag PDF."""
+        from pathlib import Path
+
+        pdf_path = Path("samples/Formloser-Antrag-Inland.pdf")
+        if not pdf_path.exists():
+            pytest.skip("Formloser-Antrag PDF not found")
+
+        extractor = PDFFormExtractor()
+
+        has_form = extractor.has_form(pdf_path)
+
+        if has_form:
+            form_data = extractor.extract(pdf_path)
+            assert isinstance(form_data.fields, list)
+        else:
+            with pytest.raises(PDFFormNotFoundError):
+                extractor.extract(pdf_path)
+
+    def test_extract_vfnm_pdf(self) -> None:
+        """Test extracting form data from VFNM PDF."""
+        from pathlib import Path
+
+        pdf_path = Path("samples/VFNM-2018-05-22-mustervorlage-vorblatt.pdf")
+        if not pdf_path.exists():
+            pytest.skip("VFNM PDF not found")
+
+        extractor = PDFFormExtractor()
+
+        has_form = extractor.has_form(pdf_path)
+
+        if has_form:
+            form_data = extractor.extract(pdf_path)
+            assert isinstance(form_data.fields, list)
+        else:
+            with pytest.raises(PDFFormNotFoundError):
+                extractor.extract(pdf_path)
+
+
 class TestExtractEdgeCases:
     """Tests for extract method edge cases."""
 
