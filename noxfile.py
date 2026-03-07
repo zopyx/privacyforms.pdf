@@ -28,7 +28,7 @@ def test(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     # Run tests
@@ -36,7 +36,7 @@ def test(session: nox.Session) -> None:
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "pytest",
         "-v",
         "--cov",
@@ -57,14 +57,14 @@ def lint(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     session.run(
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "ruff",
         "check",
         "privacyforms_pdf",
@@ -74,7 +74,7 @@ def lint(session: nox.Session) -> None:
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "ruff",
         "format",
         "--check",
@@ -95,14 +95,14 @@ def type_check(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     session.run(
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "ty",
         "check",
     )
@@ -120,14 +120,14 @@ def format_code(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     session.run(
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "ruff",
         "format",
         "privacyforms_pdf",
@@ -147,14 +147,14 @@ def fix(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     session.run(
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "ruff",
         "check",
         "--fix",
@@ -175,7 +175,7 @@ def check_all(session: nox.Session) -> None:
         "sync",
         "--group",
         "dev",
-        env={"UV_PYTHON": session.virtualenv.interpreter},
+        env={"UV_PYTHON": session.virtualenv.interpreter},  # type: ignore[attr-defined]
     )
     
     # Run tests
@@ -183,7 +183,7 @@ def check_all(session: nox.Session) -> None:
         "uv",
         "run",
         "--python",
-        session.virtualenv.interpreter,
+        session.virtualenv.interpreter,  # type: ignore[attr-defined]
         "pytest",
         "-v",
         "--cov",
