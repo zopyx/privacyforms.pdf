@@ -1778,7 +1778,7 @@ class TestGeometryExtractionReal:
         from pathlib import Path
 
         try:
-            import pdfplumber  # noqa: F401
+            import pdfplumber  # noqa: F401  # type: ignore[import-not-found]
         except ImportError:
             pytest.skip("pdfplumber not installed")
 
