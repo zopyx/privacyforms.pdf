@@ -10,6 +10,7 @@ import click
 
 from .extractor import (
     FormValidationError,
+    PDFField,
     PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
@@ -27,6 +28,21 @@ def create_extractor(extract_geometry: bool = True) -> PDFFormExtractor:
     """
     # pypdf is always available, no external dependencies to check
     return PDFFormExtractor(extract_geometry=extract_geometry)
+
+
+def _format_list_fields_value(field: PDFField) -> str:
+    """Build the value column text for the list-fields command."""
+    value_parts = [str(field.value)] if str(field.value) else []
+
+    if field.field_type == "radiobuttongroup" and field.options:
+        options_str = ", ".join(str(option) for option in field.options)
+        value_parts.append(f"[options: {options_str}]")
+
+    value_str = " ".join(value_parts)
+
+    if len(value_str) > 50:
+        return value_str[:47] + "..."
+    return value_str
 
 
 @click.group()
@@ -143,9 +159,7 @@ def list_fields(ctx: click.Context, pdf_path: Path, geometry: bool) -> None:  # 
 
         # Print fields
         for field in fields:
-            value_str = str(field.value)
-            if len(value_str) > 50:
-                value_str = value_str[:47] + "..."
+            value_str = _format_list_fields_value(field)
             line = f"{field.field_type:<{type_width}} {field.name:<{name_width}} {value_str}"
 
             if geometry and field.geometry:
