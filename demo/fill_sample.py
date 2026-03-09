@@ -38,7 +38,7 @@ def main() -> int:
 
     print(f"Step 1: Extracting fields from {pdf_path}...")
     extractor = PDFFormExtractor()
-    
+
     # Check if PDF has a form
     if not extractor.has_form(pdf_path):
         print("Error: PDF does not contain a form")
@@ -70,13 +70,13 @@ def main() -> int:
     print(f"\nStep 3: Filling form and saving to {output_path}...")
     try:
         result = extractor.fill_form_from_json(
-            pdf_path, 
-            json_path, 
+            pdf_path,
+            json_path,
             output_path,
-            validate=False  # Skip validation to allow partial fills
+            validate=False,  # Skip validation to allow partial fills
         )
         print(f"Success! Filled PDF saved to: {result}")
-        
+
         # Verify by extracting again
         print("\nStep 4: Verifying filled data...")
         filled_data = extractor.extract(result)
@@ -84,9 +84,9 @@ def main() -> int:
         print("\n--- Filled Values ---")
         for field in filled_data.fields:
             print(f"  - {field.name}: {field.value!r}")
-        
+
         return 0
-        
+
     except Exception as e:
         print(f"Error filling form: {e}")
         return 1
