@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, TextStringObject
 
 if TYPE_CHECKING:
     from pypdf.generic import ArrayObject
@@ -49,6 +51,21 @@ class FormValidationError(PDFFormError):
         if self.errors:
             return f"{self.message}\n- " + "\n- ".join(self.errors)
         return self.message
+
+
+class _PypdfWarningFilter(logging.Filter):
+    """Filter noisy non-fatal pypdf warnings."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Annotation sizes differ:" not in record.getMessage()
+
+
+def _install_pypdf_warning_filter() -> None:
+    """Install warning filter once for pypdf logger."""
+    for logger_name in ("pypdf", "pypdf.generic._link"):
+        logger = logging.getLogger(logger_name)
+        if not any(isinstance(f, _PypdfWarningFilter) for f in logger.filters):
+            logger.addFilter(_PypdfWarningFilter())
 
 
 class FieldGeometry(BaseModel):
@@ -292,6 +309,7 @@ class PDFFormExtractor:
         """
         self._timeout_seconds = timeout_seconds
         self._extract_geometry = extract_geometry
+        _install_pypdf_warning_filter()
 
     @staticmethod
     def _get_field_type(field: dict[str, Any]) -> str:
@@ -870,14 +888,21 @@ class PDFFormExtractor:
 
         # Update all fields at once on all pages where they appear
         if field_values:
-            # We need to call update_page_form_field_values for each page
-            # to ensure all widgets are updated. pypdf 5+ correctly handles
-            # this by only updating widgets present on the passed page.
-            for page in writer.pages:
-                writer.update_page_form_field_values(
-                    page,
-                    field_values,
-                )
+            try:
+                # We need to call update_page_form_field_values for each page
+                # to ensure all widgets are updated. pypdf 5+ correctly handles
+                # this by only updating widgets present on the passed page.
+                for page in writer.pages:
+                    writer.update_page_form_field_values(
+                        page,
+                        field_values,
+                    )
+            except AttributeError as exc:
+                # Work around pypdf appearance-generation crashes on some PDFs
+                # (e.g. "'int' object has no attribute 'encode'").
+                if "'int' object has no attribute 'encode'" not in str(exc):
+                    raise
+                self._fill_form_fields_without_appearance(writer, field_values)
 
         # Write output
         output_file = Path(output_path) if output_path else pdf_path
@@ -885,6 +910,53 @@ class PDFFormExtractor:
             writer.write(f)
 
         return output_file
+
+    def _fill_form_fields_without_appearance(
+        self,
+        writer: PdfWriter,
+        field_values: dict[str, str],
+    ) -> None:
+        """Fallback form fill that skips appearance-stream generation."""
+        writer.set_need_appearances_writer(True)
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            if not annotations:
+                continue
+
+            for annotation_ref in annotations:
+                annotation = annotation_ref.get_object()
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+
+                if "/FT" in annotation and "/T" in annotation:
+                    parent_annotation = annotation
+                else:
+                    parent_ref = annotation.get("/Parent")
+                    parent_annotation = parent_ref.get_object() if parent_ref else annotation
+
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+
+                matched_field_name = None
+                for field_name in field_values:
+                    if field_name in (qualified_name, annotation_name, parent_name):
+                        matched_field_name = field_name
+                        break
+                if matched_field_name is None:
+                    continue
+
+                value = field_values[matched_field_name]
+                field_type = parent_annotation.get("/FT", annotation.get("/FT"))
+                if field_type == "/Btn":
+                    button_value = NameObject(value if value.startswith("/") else f"/{value}")
+                    parent_annotation[NameObject("/V")] = button_value
+                    annotation[NameObject("/V")] = button_value
+                    annotation[NameObject("/AS")] = button_value
+                else:
+                    text_value = TextStringObject(value)
+                    parent_annotation[NameObject("/V")] = text_value
+                    annotation[NameObject("/V")] = text_value
 
     def fill_form_from_json(
         self,

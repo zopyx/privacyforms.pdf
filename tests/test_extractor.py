@@ -729,6 +729,60 @@ class TestFillForm:
         ):
             extractor.fill_form(test_file, {"Name": "John"}, validate=False)
 
+    def test_fill_form_falls_back_on_pypdf_appearance_error(self, tmp_path: Path) -> None:
+        """Test fill_form fallback is used for pypdf appearance-stream bug."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx", "/V": ""}}
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [MagicMock()]
+        mock_writer.update_page_form_field_values.side_effect = AttributeError(
+            "'int' object has no attribute 'encode'"
+        )
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+            patch.object(extractor, "_fill_form_fields_without_appearance") as fallback,
+        ):
+            result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
+            assert result == output_file
+            fallback.assert_called_once_with(mock_writer, {"Name": "John"})
+
+    def test_fill_form_without_appearance_updates_widget_values(self) -> None:
+        """Test fallback fill updates text and checkbox widget values."""
+        extractor = PDFFormExtractor()
+
+        text_annotation = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Name"}
+        button_annotation = {"/Subtype": "/Widget", "/FT": "/Btn", "/T": "Agree"}
+
+        text_ref = MagicMock()
+        text_ref.get_object.return_value = text_annotation
+        button_ref = MagicMock()
+        button_ref.get_object.return_value = button_annotation
+
+        page = {"/Annots": [text_ref, button_ref]}
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+
+        extractor._fill_form_fields_without_appearance(
+            mock_writer,
+            {"Name": "John", "Agree": "/Yes"},
+        )
+
+        mock_writer.set_need_appearances_writer.assert_called_once_with(True)
+        assert str(text_annotation["/V"]) == "John"
+        assert str(button_annotation["/V"]) == "/Yes"
+        assert str(button_annotation["/AS"]) == "/Yes"
+
 
 class TestFillFormFromJson:
     """Tests for fill_form_from_json method."""
