@@ -63,7 +63,7 @@ def main() -> int:
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(sample_data, f, indent=2, ensure_ascii=False)
     print(f"Sample data written to {json_path}")
-    print(f"\n--- Sample Data ---")
+    print("\n--- Sample Data ---")
     print(json.dumps(sample_data, indent=2))
 
     # Fill the form
