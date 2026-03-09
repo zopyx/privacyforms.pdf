@@ -1019,7 +1019,11 @@ class PDFFormExtractor:
         """Resolve widget and parent annotations."""
         annotation = cast(
             "DictionaryObject",
-            annotation_ref.get_object() if hasattr(annotation_ref, "get_object") else annotation_ref,
+            (
+                annotation_ref.get_object()
+                if hasattr(annotation_ref, "get_object")
+                else annotation_ref
+            ),
         )
         parent_ref = annotation.get("/Parent")
         parent_annotation = cast(
