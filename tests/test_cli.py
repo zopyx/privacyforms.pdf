@@ -301,6 +301,26 @@ class TestListFieldsCommand:
             assert result.exit_code == 0
             assert "Option1 [options: Option1, Option2, Option3]" in result.output
 
+    def test_list_fields_shows_listbox_options(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows options for listbox fields."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_fields = [
+            PDFField(
+                name="Languages",
+                id="1",
+                type="listbox",
+                value="German",
+                options=["English", "German", "French"],
+            )
+        ]
+
+        with patch.object(PDFFormExtractor, "list_fields", return_value=mock_fields):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--no-geometry"])
+            assert result.exit_code == 0
+            assert "German [options: English, German, French]" in result.output
+
     def test_list_fields_no_form_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test list-fields command handles PDFFormNotFoundError."""
         test_file = tmp_path / "test.pdf"

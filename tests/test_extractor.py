@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pypdf.generic import (
+    ArrayObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    StreamObject,
+    TextStringObject,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path as PathType
@@ -22,6 +31,8 @@ from privacyforms_pdf.extractor import (
     PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
+    _install_pypdf_warning_filter,
+    _PypdfWarningFilter,
     get_available_geometry_backends,
     has_geometry_support,
 )
@@ -782,6 +793,140 @@ class TestFillForm:
         assert str(text_annotation["/V"]) == "John"
         assert str(button_annotation["/V"]) == "/Yes"
         assert str(button_annotation["/AS"]) == "/Yes"
+
+    def test_fill_form_syncs_radio_button_appearance_states(self, tmp_path: Path) -> None:
+        """Test fill_form sets radio widget appearances from option labels."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        writer_parent: dict[str, object] = {
+            "/FT": "/Btn",
+            "/T": "Gender",
+            "/Opt": ["Male", "Female"],
+        }
+        writer_parent_ref = MagicMock()
+        writer_parent_ref.get_object.return_value = writer_parent
+
+        writer_radio_0 = {
+            "/Subtype": "/Widget",
+            "/Parent": writer_parent_ref,
+            "/AP": {"/N": {"/0": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+        writer_radio_1 = {
+            "/Subtype": "/Widget",
+            "/Parent": writer_parent_ref,
+            "/AP": {"/N": {"/1": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+
+        writer_radio_0_ref = MagicMock()
+        writer_radio_0_ref.get_object.return_value = writer_radio_0
+        writer_radio_1_ref = MagicMock()
+        writer_radio_1_ref.get_object.return_value = writer_radio_1
+        writer_parent["/Kids"] = [writer_radio_0_ref, writer_radio_1_ref]
+
+        page = {"/Annots": [writer_radio_0_ref, writer_radio_1_ref]}
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {
+            "Gender": {
+                "/FT": "/Btn",
+                "/T": "Gender",
+                "/Opt": ["Male", "Female"],
+            }
+        }
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+        mock_writer._add_object.side_effect = lambda obj: obj
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            extractor.fill_form(
+                test_file,
+                {"Gender": "Male"},
+                output_file,
+                validate=False,
+            )
+
+        assert str(writer_parent["/V"]) == "/0"
+        assert str(writer_radio_0["/AS"]) == "/0"
+        assert str(writer_radio_0["/V"]) == "/0"
+        assert str(writer_radio_1["/AS"]) == "/Off"
+        assert str(writer_radio_1["/V"]) == "/Off"
+
+    def test_fill_form_sets_listbox_selection_index(self, tmp_path: Path) -> None:
+        """Test fill_form sets the listbox value and selected option index."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        listbox_annotation = DictionaryObject(
+            {
+                NameObject("/Subtype"): NameObject("/Widget"),
+                NameObject("/FT"): NameObject("/Ch"),
+                NameObject("/T"): TextStringObject("Language"),
+                NameObject("/Ff"): NumberObject(0),
+                NameObject("/Opt"): ArrayObject(
+                    [
+                        TextStringObject("English"),
+                        TextStringObject("German"),
+                        TextStringObject("French"),
+                    ]
+                ),
+            }
+        )
+        listbox_ref = MagicMock()
+        listbox_ref.get_object.return_value = listbox_annotation
+
+        page = {"/Annots": [listbox_ref]}
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {
+            "Language": {
+                "/FT": "/Ch",
+                "/T": "Language",
+                "/Ff": 0,
+                "/Opt": ["English", "German", "French"],
+            }
+        }
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+        mock_writer._add_object.side_effect = lambda obj: obj
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            extractor.fill_form(
+                test_file,
+                {"Language": "German"},
+                output_file,
+                validate=False,
+            )
+
+        assert str(listbox_annotation["/V"]) == "German"
+        assert list(cast("ArrayObject", listbox_annotation["/I"])) == [1]
+        assert int(cast("NumberObject", listbox_annotation["/TI"])) == 1
+        appearance = cast("DictionaryObject", listbox_annotation["/AP"])
+        appearance_stream = (
+            cast("StreamObject", appearance["/N"].get_object()).get_data().decode("latin1")
+        )
+        assert "0.600006 0.756866 0.854904 rg" in appearance_stream
+        assert "(German) Tj" in appearance_stream
 
 
 class TestFillFormFromJson:
@@ -1924,3 +2069,286 @@ class TestExtractGeometryDisabled:
             assert isinstance(result, PDFFormData)
             # Field should have no geometry
             assert result.fields[0].geometry is None
+
+
+class TestExtractorCoverageHelpers:
+    """Focused tests for uncovered extractor helper branches."""
+
+    def test_warning_filter_blocks_annotation_size_message(self) -> None:
+        """Test warning filter rejects the known noisy pypdf warning."""
+        record = MagicMock()
+        record.getMessage.return_value = "Annotation sizes differ: old vs new"
+        assert _PypdfWarningFilter().filter(record) is False
+
+    def test_install_warning_filter_is_idempotent(self) -> None:
+        """Test installing pypdf warning filters more than once does not duplicate them."""
+        import logging
+
+        logger = logging.getLogger("pypdf")
+        original_filters = list(logger.filters)
+        try:
+            logger.filters = []
+            _install_pypdf_warning_filter()
+            count_after_first = sum(isinstance(f, _PypdfWarningFilter) for f in logger.filters)
+            _install_pypdf_warning_filter()
+            count_after_second = sum(isinstance(f, _PypdfWarningFilter) for f in logger.filters)
+            assert count_after_first == 1
+            assert count_after_second == 1
+        finally:
+            logger.filters = original_filters
+
+    def test_get_field_options_from_nested_lists(self) -> None:
+        """Test extracting options from nested /Opt list variants."""
+        field = {"/Opt": [["export1", "Label 1"], ["Only One"]]}
+        assert PDFFormExtractor._get_field_options(field) == ["Label 1", "Only One"]
+
+    def test_extract_widgets_info_updates_pages_and_geometry(self) -> None:
+        """Test widget scan appends pages and fills missing geometry from a later widget."""
+        extractor = PDFFormExtractor()
+
+        annot1 = {
+            "/Subtype": "/Widget",
+            "/T": "Field1",
+        }
+        annot2 = {
+            "/Subtype": "/Widget",
+            "/T": "Field1",
+            "/Rect": [10, 20, 30, 40],
+        }
+        bad_ref = MagicMock()
+        bad_ref.get_object.side_effect = Exception("broken")
+        ref1 = MagicMock()
+        ref1.get_object.return_value = annot1
+        ref2 = MagicMock()
+        ref2.get_object.return_value = annot2
+        page1 = {"/Annots": [bad_ref, ref1]}
+        page2 = {"/Annots": [ref2]}
+
+        reader = MagicMock()
+        reader.pages = [page1, page2]
+
+        info = extractor._extract_widgets_info(reader)
+        pages, geometry = info["Field1"]
+        assert pages == [1, 2]
+        assert geometry is not None
+        assert geometry.rect == (10.0, 20.0, 30.0, 40.0)
+
+    def test_lookup_methods_match_nonfirst_field(self, tmp_path: Path) -> None:
+        """Test lookup helpers iterate past the first non-matching field."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        fields = [
+            PDFField(name="First", id="1", type="textfield", value="A"),
+            PDFField(name="Second", id="2", type="textfield", value="B"),
+        ]
+        form_data = PDFFormData(test_file, "1.4", True, fields, {})
+
+        with patch.object(extractor, "extract", return_value=form_data):
+            assert extractor.get_field_value(test_file, "Second") == "B"
+            assert extractor.get_field_by_id(test_file, "2") is fields[1]
+            assert extractor.get_field_by_name(test_file, "Second") is fields[1]
+
+    def test_fill_form_with_validation_success(self, tmp_path: Path) -> None:
+        """Test fill_form continues when validation passes."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        output_file = tmp_path / "output.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        mock_writer = MagicMock()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=[]),
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=True)
+            assert result == output_file
+
+    def test_fill_form_reraises_unexpected_attribute_error(self, tmp_path: Path) -> None:
+        """Test fill_form re-raises unrelated AttributeError from pypdf."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        output_file = tmp_path / "output.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        mock_writer = MagicMock()
+        mock_writer.pages = [MagicMock()]
+        mock_writer.update_page_form_field_values.side_effect = AttributeError("different bug")
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+            pytest.raises(AttributeError, match="different bug"),
+        ):
+            extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
+
+    def test_fill_form_without_appearance_skips_non_widgets_and_unmatched(self) -> None:
+        """Test fallback fill ignores unsupported annotations cleanly."""
+        extractor = PDFFormExtractor()
+
+        non_widget = {"/Subtype": "/Link", "/T": "Ignore"}
+        unmatched = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Other"}
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = non_widget
+        unmatched_ref = MagicMock()
+        unmatched_ref.get_object.return_value = unmatched
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [widget_ref, unmatched_ref]}, {"/Annots": []}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._fill_form_fields_without_appearance(writer, {"Name": "John"})
+
+        writer.set_need_appearances_writer.assert_called_once_with(True)
+        assert "/V" not in unmatched
+
+    def test_get_field_by_name_from_writer_returns_none_for_no_match(self) -> None:
+        """Test writer field lookup returns None when no widget matches the name."""
+        extractor = PDFFormExtractor()
+        annot = {"/Subtype": "/Widget", "/T": "Other"}
+        ref = MagicMock()
+        ref.get_object.return_value = annot
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        assert extractor.get_field_by_name_from_writer(writer, "Missing") is None
+
+    def test_get_widget_on_state_handles_missing_ap_variants(self) -> None:
+        """Test widget on-state helper handles missing appearance data."""
+        assert PDFFormExtractor._get_widget_on_state({}) is None
+        assert PDFFormExtractor._get_widget_on_state({"/AP": {}}) is None
+        assert (
+            PDFFormExtractor._get_widget_on_state({"/AP": {"/N": {"/Off": None, "/Yes": None}}})
+            == "/Yes"
+        )
+
+    def test_resolve_radio_field_state_variants(self) -> None:
+        """Test radio state resolution for direct, option-mapped, and fallback cases."""
+        kids = [
+            {"/AP": {"/N": {"/0": None, "/Off": None}}},
+            {"/AP": {"/N": {"/1": None, "/Off": None}}},
+        ]
+        parent = {"/Kids": kids, "/Opt": ["Male", "Female"]}
+
+        assert PDFFormExtractor._resolve_radio_field_state(parent, "/0") == "/0"
+        assert PDFFormExtractor._resolve_radio_field_state(parent, "Female") == "/1"
+        assert (
+            PDFFormExtractor._resolve_radio_field_state(
+                {"/Kids": [{"/AP": {"/N": {"/X": None}}}]},
+                "missing",
+            )
+            == "/Off"
+        )
+
+    def test_sync_radio_button_states_ignores_irrelevant_annotations(self) -> None:
+        """Test radio sync skips non-radio widgets and unmatched field names."""
+        extractor = PDFFormExtractor()
+        text = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Text"}
+        radio = {
+            "/Subtype": "/Widget",
+            "/Parent": MagicMock(),
+            "/AP": {"/N": {"/0": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+        radio_parent = {"/FT": "/Btn", "/T": "Gender", "/Opt": ["Male"], "/Kids": []}
+        radio["/Parent"].get_object.return_value = radio_parent
+        radio_ref = MagicMock()
+        radio_ref.get_object.return_value = radio
+        text_ref = MagicMock()
+        text_ref.get_object.return_value = text
+        radio_parent["/Kids"] = [radio_ref]
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [text_ref, radio_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._sync_radio_button_states(writer, {"Other": "Male"})
+        assert radio["/AS"] == "/Off"
+
+    def test_resolve_listbox_index_missing_value(self) -> None:
+        """Test listbox index resolution returns None for unknown values."""
+        assert PDFFormExtractor._resolve_listbox_index({"/Opt": ["A", "B"]}, "C") is None
+
+    def test_sync_listbox_selection_indexes_skips_nonmatching_annotations(self) -> None:
+        """Test listbox sync skips irrelevant annotations and empty pages."""
+        extractor = PDFFormExtractor()
+        non_widget = {"/Subtype": "/Link", "/T": "Language"}
+        wrong_type = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Language"}
+        ref1 = MagicMock()
+        ref1.get_object.return_value = non_widget
+        ref2 = MagicMock()
+        ref2.get_object.return_value = wrong_type
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref1, ref2]}, {"/Annots": []}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._sync_listbox_selection_indexes(writer, {"Language": "German"})
+        assert "/I" not in wrong_type
+
+    def test_sync_listbox_selection_indexes_handles_missing_options_and_ap(self) -> None:
+        """Test listbox sync handles unknown values and missing appearance data."""
+        extractor = PDFFormExtractor()
+        annotation = {"/Subtype": "/Widget", "/FT": "/Ch", "/T": "Language", "/Opt": ["A", "B"]}
+        ref = MagicMock()
+        ref.get_object.return_value = annotation
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation_obj: annotation_obj.get(
+            "/T", ""
+        )
+        writer._add_object.side_effect = lambda obj: obj
+
+        extractor._sync_listbox_selection_indexes(writer, {"Language": "Missing"})
+        assert str(annotation["/V"]) == "Missing"
+        assert "/I" not in annotation
+        assert "/AP" in annotation
+
+    def test_build_listbox_appearance_stream_variants(self) -> None:
+        """Test listbox appearance builder handles missing and existing resource metadata."""
+        extractor = PDFFormExtractor()
+        writer = MagicMock()
+        writer._add_object.side_effect = lambda obj: obj
+
+        assert extractor._build_listbox_appearance_stream(writer, {}, {}, 0) is None
+
+        annotation = {
+            "/AP": {
+                "/N": type(
+                    "Ref",
+                    (),
+                    {
+                        "get_object": lambda self: {
+                            "/Resources": DictionaryObject(
+                                {
+                                    NameObject("/Font"): DictionaryObject(
+                                        {NameObject("/F1"): DictionaryObject()}
+                                    )
+                                }
+                            ),
+                            "/BBox": ArrayObject(
+                                [
+                                    NumberObject(0),
+                                    NumberObject(0),
+                                    NumberObject(120),
+                                    NumberObject(40),
+                                ]
+                            ),
+                        }
+                    },
+                )()
+            }
+        }
+        parent = {"/Opt": ["One", "Two"]}
+        stream = extractor._build_listbox_appearance_stream(writer, annotation, parent, None)
+        assert stream is not None
+        data = cast("StreamObject", stream).get_data().decode("latin1")
+        assert "/F1" in data
+        assert "0.600006 0.756866 0.854904 rg" not in data

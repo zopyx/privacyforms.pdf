@@ -34,7 +34,7 @@ def _format_list_fields_value(field: PDFField) -> str:
     """Build the value column text for the list-fields command."""
     value_parts = [str(field.value)] if str(field.value) else []
 
-    if field.field_type == "radiobuttongroup" and field.options:
+    if field.field_type in {"radiobuttongroup", "listbox"} and field.options:
         options_str = ", ".join(str(option) for option in field.options)
         value_parts.append(f"[options: {options_str}]")
 
