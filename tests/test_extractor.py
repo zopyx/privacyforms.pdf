@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1237,6 +1238,268 @@ class TestBackwardsCompatibility:
         from privacyforms_pdf.extractor import PDFCPUNotFoundError
 
         assert PDFCPUNotFoundError is PDFFormError
+
+
+class TestIsPdfcpuAvailable:
+    """Tests for is_pdfcpu_available function."""
+
+    def test_is_pdfcpu_available_returns_bool(self) -> None:
+        """Test is_pdfcpu_available returns a boolean."""
+        from privacyforms_pdf.extractor import is_pdfcpu_available
+
+        result = is_pdfcpu_available()
+        assert isinstance(result, bool)
+
+    def test_is_pdfcpu_available_with_custom_path(self) -> None:
+        """Test is_pdfcpu_available with custom path."""
+        from privacyforms_pdf.extractor import is_pdfcpu_available
+
+        # Test with a path that definitely doesn't exist
+        result = is_pdfcpu_available("/nonexistent/pdfcpu/binary")
+        assert result is False
+
+
+class TestFillFormWithPdfcpu:
+    """Tests for fill_form_with_pdfcpu method."""
+
+    def test_fill_form_with_pdfcpu_pdfcpu_not_found(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when pdfcpu not found."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {}}
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value=None),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(
+                    test_file, {"Name": "John"}, pdfcpu_path="/nonexistent/pdfcpu"
+                )
+            assert "pdfcpu binary not found" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_no_form(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when PDF has no form."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = None
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            pytest.raises(PDFFormNotFoundError),
+        ):
+            extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"})
+
+    def test_fill_form_with_pdfcpu_validation_fails(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when validation fails."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=["bad field"]),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            pytest.raises(FormValidationError),
+        ):
+            # Unknown field should trigger validation error
+            extractor.fill_form_with_pdfcpu(test_file, {"UnknownField": "value"}, validate=True)
+
+    def test_fill_form_with_pdfcpu_success(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu succeeds."""
+        import json
+
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+        filled_json: dict[str, Any] = {}
+
+        def mock_run(cmd: list[str], *_args: Any, **_kwargs: Any) -> MagicMock:
+            """Simulate pdfcpu export/fill and capture the filled payload."""
+            if cmd[2] == "export":
+                export_path = Path(cmd[4])
+                export_path.write_text(
+                    json.dumps(
+                        {
+                            "header": {"source": str(test_file), "version": "pdfcpu v0.11.1"},
+                            "forms": [
+                                {
+                                    "textfield": [
+                                        {
+                                            "id": "76.14",
+                                            "name": "Form1.Name",
+                                            "value": "",
+                                            "locked": False,
+                                            "multiline": False,
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            else:
+                json_path = Path(cmd[4])
+                filled_json.update(json.loads(json_path.read_text(encoding="utf-8")))
+                Path(cmd[5]).touch()
+            return MagicMock(returncode=0)
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run", side_effect=mock_run
+            ) as mock_subprocess,
+        ):
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+            assert result == output_file
+            assert mock_subprocess.call_count == 2
+            assert filled_json["forms"][0]["textfield"][0]["value"] == "John"
+            assert filled_json["forms"][0]["textfield"][0]["name"] == "Form1.Name"
+            assert filled_json["forms"][0]["textfield"][0]["multiline"] is False
+
+    def test_fill_form_with_pdfcpu_subprocess_error(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu handles subprocess error."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, ["pdfcpu"], stderr="error"),
+            ),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, validate=False)
+            assert "pdfcpu failed" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_falls_back_to_pypdf_on_missing_da(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu falls back when pdfcpu rejects missing /DA."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                extractor,
+                "_export_pdfcpu_form_data",
+                side_effect=PDFFormError(
+                    "pdfcpu failed with exit code 1: dict=formFieldDict required entry=DA missing"
+                ),
+            ),
+            patch.object(extractor, "fill_form", return_value=output_file) as mock_fill_form,
+        ):
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+
+        assert result == output_file
+        mock_fill_form.assert_called_once_with(
+            test_file, {"Name": "John"}, output_file, validate=False
+        )
+        assert extractor.last_fill_backend == "pypdf-fallback"
+        assert extractor.last_fill_backend_reason is not None
+
+    def test_fill_form_with_pdfcpu_timeout(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu handles timeout."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["pdfcpu"], 30),
+            ),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, validate=False)
+            assert "timed out" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_checkbox_conversion(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu converts boolean values correctly."""
+        import json
+
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        # Will capture JSON content inside the mock callback
+        # because temp files are deleted after subprocess.run
+        written_json: dict[str, Any] = {}
+
+        def capture_and_read_json(*args: Any, **kwargs: Any) -> MagicMock:
+            """Capture export/fill JSON files before cleanup."""
+            nonlocal written_json
+            cmd = args[0] if args else kwargs.get("args")
+            if cmd and cmd[2] == "export":
+                export_path = Path(cmd[4])
+                export_path.write_text(
+                    json.dumps(
+                        {
+                            "header": {"source": str(test_file), "version": "pdfcpu v0.11.1"},
+                            "forms": [
+                                {
+                                    "checkbox": [
+                                        {
+                                            "id": "76.45",
+                                            "name": "Form1.Agree",
+                                            "default": False,
+                                            "value": False,
+                                            "locked": False,
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            elif cmd and len(cmd) >= 6:
+                json_path = Path(cmd[4])
+                with open(json_path, encoding="utf-8") as f:
+                    written_json = json.load(f)
+                Path(cmd[5]).touch()
+            return MagicMock(returncode=0)
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch("privacyforms_pdf.extractor.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = capture_and_read_json
+            extractor.fill_form_with_pdfcpu(test_file, {"Agree": True}, output_file, validate=False)
+
+            # Check that pdfcpu export and fill were both invoked
+            assert mock_run.call_count == 2
+
+            # Check that the checkbox value is a boolean True (not a string)
+            assert "forms" in written_json
+            assert len(written_json["forms"]) > 0
+            checkbox_fields = written_json["forms"][0].get("checkbox", [])
+            assert len(checkbox_fields) == 1
+            assert checkbox_fields[0]["value"] is True
+            assert isinstance(checkbox_fields[0]["value"], bool)
 
 
 class TestGetFieldTypeEdgeCases:

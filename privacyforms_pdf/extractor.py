@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, cast
 
@@ -313,7 +316,19 @@ class PDFFormExtractor:
         """
         self._timeout_seconds = timeout_seconds
         self._extract_geometry = extract_geometry
+        self._last_fill_backend = "pypdf"
+        self._last_fill_backend_reason: str | None = None
         _install_pypdf_warning_filter()
+
+    @property
+    def last_fill_backend(self) -> str:
+        """Return the backend used for the most recent fill operation."""
+        return self._last_fill_backend
+
+    @property
+    def last_fill_backend_reason(self) -> str | None:
+        """Return an optional explanation for the most recent backend choice."""
+        return self._last_fill_backend_reason
 
     @staticmethod
     def _get_field_type(field: dict[str, Any]) -> str:
@@ -830,6 +845,12 @@ class PDFFormExtractor:
 
         return errors
 
+    @staticmethod
+    def _should_fallback_from_pdfcpu(error_message: str) -> bool:
+        """Return True for known pdfcpu form-compatibility failures."""
+        normalized = error_message.lower()
+        return "required entry=da missing" in normalized or "unexpected panic attack" in normalized
+
     def fill_form(
         self,
         pdf_path: str | Path,
@@ -862,6 +883,8 @@ class PDFFormExtractor:
             >>> form_data = {"Candidate Name": "John Smith", "Full time": True}
             >>> extractor.fill_form("form.pdf", form_data, "filled.pdf")
         """
+        self._last_fill_backend = "pypdf"
+        self._last_fill_backend_reason = None
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
 
@@ -1313,6 +1336,240 @@ class PDFFormExtractor:
 
         return self.fill_form(pdf_path, form_data, output_path, validate=validate)
 
+    def _run_pdfcpu_command(self, cmd: list[str]) -> None:
+        """Run a pdfcpu command and normalize execution failures."""
+        try:
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout_seconds,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            error_msg = f"pdfcpu failed with exit code {e.returncode}"
+            if e.stderr:
+                error_msg += f": {e.stderr}"
+            raise PDFFormError(error_msg) from e
+        except subprocess.TimeoutExpired as e:
+            raise PDFFormError(f"pdfcpu timed out after {self._timeout_seconds} seconds") from e
+        except FileNotFoundError as e:
+            raise PDFFormError(f"pdfcpu binary not found: {cmd[0]}") from e
+
+    def _export_pdfcpu_form_data(self, pdf_path: Path, pdfcpu_binary: str) -> dict[str, Any]:
+        """Export a PDF form using pdfcpu so its full field metadata is preserved."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as temp_json:
+            temp_json_path = Path(temp_json.name)
+
+        try:
+            self._run_pdfcpu_command(
+                [pdfcpu_binary, "form", "export", str(pdf_path), str(temp_json_path)]
+            )
+
+            with open(temp_json_path, encoding="utf-8") as f:
+                return cast("dict[str, Any]", json.load(f))
+        finally:
+            if temp_json_path.exists():
+                temp_json_path.unlink()
+
+    @staticmethod
+    def _build_pdfcpu_field_index(
+        pdfcpu_data: dict[str, Any],
+    ) -> tuple[dict[str, tuple[str, dict[str, Any]]], dict[str, tuple[str, dict[str, Any]]]]:
+        """Index exported pdfcpu fields by exact and terminal field name."""
+        exact_matches: dict[str, tuple[str, dict[str, Any]]] = {}
+        suffix_candidates: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+
+        for form in pdfcpu_data.get("forms", []):
+            if not isinstance(form, dict):
+                continue
+
+            for field_type, entries in form.items():
+                if not isinstance(entries, list):
+                    continue
+
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+
+                    field_id = entry.get("id")
+                    if field_id is not None:
+                        exact_matches[str(field_id)] = (field_type, entry)
+
+                    field_name = entry.get("name")
+                    if field_name is None:
+                        continue
+
+                    field_name_str = str(field_name)
+                    exact_matches[field_name_str] = (field_type, entry)
+                    suffix_candidates.setdefault(field_name_str.rsplit(".", 1)[-1], []).append(
+                        (field_type, entry)
+                    )
+
+        suffix_matches = {
+            suffix: matches[0] for suffix, matches in suffix_candidates.items() if len(matches) == 1
+        }
+
+        return exact_matches, suffix_matches
+
+    def _merge_pdfcpu_form_data(
+        self,
+        pdfcpu_data: dict[str, Any],
+        form_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Merge simple key:value form data into exported pdfcpu JSON."""
+        exact_matches, suffix_matches = self._build_pdfcpu_field_index(pdfcpu_data)
+
+        for field_name, value in form_data.items():
+            lookup_key = str(field_name)
+            field_match = exact_matches.get(lookup_key) or suffix_matches.get(lookup_key)
+            if field_match is None:
+                continue
+
+            field_type, field_entry = field_match
+
+            if field_type == "checkbox":
+                field_entry["value"] = bool(value)
+                continue
+
+            if field_type == "listbox":
+                if isinstance(value, list):
+                    field_entry.pop("value", None)
+                    field_entry["values"] = [str(item) for item in value]
+                else:
+                    field_entry.pop("values", None)
+                    field_entry["value"] = str(value)
+                continue
+
+            field_entry["value"] = str(value)
+
+        return pdfcpu_data
+
+    def fill_form_with_pdfcpu(
+        self,
+        pdf_path: str | Path,
+        form_data: dict[str, Any],
+        output_path: str | Path | None = None,
+        *,
+        validate: bool = True,
+        pdfcpu_path: str = "pdfcpu",
+    ) -> Path:
+        """Fill a PDF form with data using pdfcpu.
+
+        This method uses the external pdfcpu binary to fill PDF forms.
+        pdfcpu must be installed and available in the system PATH or
+        specified via the pdfcpu_path parameter.
+
+        Args:
+            pdf_path: Path to the PDF file containing the form.
+            form_data: The form data to fill (format: {"Field Name": value}).
+            output_path: Optional output path. If not provided, the input PDF
+                        is modified in place.
+            validate: If True, validates form data before filling using pypdf.
+            pdfcpu_path: Path to the pdfcpu binary (default: "pdfcpu").
+
+        Returns:
+            Path to the filled PDF (output_path or pdf_path if no output specified).
+
+        Raises:
+            FileNotFoundError: If the PDF file or pdfcpu binary does not exist.
+            FormValidationError: If validation fails and validate=True.
+            PDFFormNotFoundError: If the PDF does not contain a form.
+            PDFFormError: If pdfcpu execution fails.
+
+        Example:
+            >>> form_data = {"Candidate Name": "John Smith", "Full time": True}
+            >>> extractor.fill_form_with_pdfcpu("form.pdf", form_data, "filled.pdf")
+        """
+        self._last_fill_backend = "pdfcpu"
+        self._last_fill_backend_reason = None
+        pdf_path = Path(pdf_path)
+        self._validate_pdf_path(pdf_path)
+
+        # Check if pdfcpu is available
+        pdfcpu_binary = shutil.which(pdfcpu_path)
+        if pdfcpu_binary is None:
+            raise PDFFormError(
+                f"pdfcpu binary not found: {pdfcpu_path}. "
+                "Please install pdfcpu: https://pdfcpu.io/install"
+            )
+
+        # Check if PDF has a form
+        if not self.has_form(pdf_path):
+            raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
+
+        # Validate form data if requested
+        if validate:
+            errors = self.validate_form_data(pdf_path, form_data)
+            if errors:
+                raise FormValidationError("Form data validation failed", errors)
+
+        # Prepare output path
+        output_file = Path(output_path) if output_path else pdf_path
+
+        try:
+            # Export the form via pdfcpu first and only update its values. Some PDFs
+            # require metadata in the exported JSON that pypdf does not expose.
+            pdfcpu_json_data = self._merge_pdfcpu_form_data(
+                self._export_pdfcpu_form_data(pdf_path, pdfcpu_binary),
+                form_data,
+            )
+        except PDFFormError as exc:
+            if not self._should_fallback_from_pdfcpu(str(exc)):
+                raise
+
+            result = self.fill_form(pdf_path, form_data, output_file, validate=False)
+            self._last_fill_backend = "pypdf-fallback"
+            self._last_fill_backend_reason = (
+                "pdfcpu could not process the source form metadata; used pypdf instead"
+            )
+            return result
+
+        # Create a temporary JSON file for pdfcpu
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as temp_json:
+            json.dump(pdfcpu_json_data, temp_json, indent=2)
+            temp_json_path = Path(temp_json.name)
+
+        try:
+            # Build pdfcpu command
+            # pdfcpu form fill <inFile> <formDataFile> <outFile>
+            cmd = [
+                pdfcpu_binary,
+                "form",
+                "fill",
+                str(pdf_path),
+                str(temp_json_path),
+                str(output_file),
+            ]
+
+            try:
+                self._run_pdfcpu_command(cmd)
+            except PDFFormError as exc:
+                if not self._should_fallback_from_pdfcpu(str(exc)):
+                    raise
+
+                result = self.fill_form(pdf_path, form_data, output_file, validate=False)
+                self._last_fill_backend = "pypdf-fallback"
+                self._last_fill_backend_reason = (
+                    "pdfcpu could not process the source form metadata; used pypdf instead"
+                )
+                return result
+
+            # Verify output file was created
+            if not output_file.exists():
+                raise PDFFormError(f"pdfcpu did not create output file: {output_file}")
+
+            return output_file
+
+        finally:
+            # Clean up temporary JSON file
+            if temp_json_path.exists():
+                temp_json_path.unlink()
+
     def _validate_pdf_path(self, pdf_path: Path) -> None:
         """Validate that the PDF path exists and is a file.
 
@@ -1326,6 +1583,18 @@ class PDFFormExtractor:
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
         if not pdf_path.is_file():
             raise FileNotFoundError(f"Path is not a file: {pdf_path}")
+
+
+def is_pdfcpu_available(pdfcpu_path: str = "pdfcpu") -> bool:
+    """Check if pdfcpu binary is available.
+
+    Args:
+        pdfcpu_path: Path to the pdfcpu binary (default: "pdfcpu").
+
+    Returns:
+        True if pdfcpu is available in the system PATH, False otherwise.
+    """
+    return shutil.which(pdfcpu_path) is not None
 
 
 def get_available_geometry_backends() -> list[str]:

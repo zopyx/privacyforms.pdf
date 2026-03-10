@@ -1,0 +1,198 @@
+"""Tests for the list-fields command."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+from click.testing import CliRunner
+
+from privacyforms_pdf.cli import main
+from privacyforms_pdf.extractor import FieldGeometry, PDFField, PDFFormError, PDFFormNotFoundError
+
+
+class TestListFieldsCommand:
+    """Tests for the list-fields command."""
+
+    def test_list_fields_success(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows fields."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_fields = [
+            PDFField(
+                name="Field Name",
+                id="1",
+                type="textfield",
+                value="Field Value",
+                pages=[1],
+                locked=False,
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "textfield" in result.output
+            assert "Field Name" in result.output
+            assert "Field Value" in result.output
+            assert "Total fields: 1" in result.output
+
+    def test_list_fields_with_geometry(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows geometry information."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        mock_fields = [
+            PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="Value",
+                pages=[1],
+                geometry=geometry,
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "Position" in result.output or "100" in result.output
+            assert "Size" in result.output or "200" in result.output
+
+    def test_list_fields_no_geometry(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command with --no-geometry flag."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        geometry = FieldGeometry(page=1, rect=(100.0, 200.0, 300.0, 400.0))
+        mock_fields = [
+            PDFField(
+                name="Field1",
+                id="1",
+                type="textfield",
+                value="Value",
+                geometry=geometry,
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--no-geometry"])
+            assert result.exit_code == 0
+            # Should still show fields but without geometry columns
+            assert "Field1" in result.output
+
+    def test_list_fields_empty(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command with no fields."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with patch("privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=[]):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "No form fields found" in result.output
+
+    def test_list_fields_long_value_truncated(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command truncates long values."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_fields = [
+            PDFField(
+                name="Long",
+                id="1",
+                type="textfield",
+                value="A" * 100,
+                pages=[1],
+                locked=False,
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "..." in result.output
+
+    def test_list_fields_shows_radio_options(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows options for radio button groups."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_fields = [
+            PDFField(
+                name="Choice",
+                id="1",
+                type="radiobuttongroup",
+                value="Option1",
+                options=["Option1", "Option2", "Option3"],
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--no-geometry"])
+            assert result.exit_code == 0
+            assert "Option1 [options: Option1, Option2, Option3]" in result.output
+
+    def test_list_fields_shows_listbox_options(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command shows options for listbox fields."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_fields = [
+            PDFField(
+                name="Languages",
+                id="1",
+                type="listbox",
+                value="German",
+                options=["English", "German", "French"],
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--no-geometry"])
+            assert result.exit_code == 0
+            assert "German [options: English, German, French]" in result.output
+
+    def test_list_fields_no_form_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command handles PDFFormNotFoundError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields",
+            side_effect=PDFFormNotFoundError("No form"),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code != 0
+            assert "No form" in result.output
+
+    def test_list_fields_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields command handles PDFFormError."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields",
+            side_effect=PDFFormError("Error"),
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code != 0
+            assert "Failed to list fields" in result.output
+
+    def test_list_fields_nonexistent_file(self, runner: CliRunner) -> None:
+        """Test list-fields command with nonexistent file."""
+        result = runner.invoke(main, ["list-fields", "/nonexistent/file.pdf"])
+        assert result.exit_code != 0
