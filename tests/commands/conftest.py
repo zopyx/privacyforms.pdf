@@ -1,15 +1,9 @@
-"""Shared pytest fixtures."""
+"""Shared fixtures for command tests."""
 
 from __future__ import annotations
 
 import pytest
 from click.testing import CliRunner
-
-
-@pytest.fixture
-def sample_pdf_path() -> str:
-    """Provide path to the sample filled PDF."""
-    return "samples/FilledForm.pdf"
 
 
 @pytest.fixture
