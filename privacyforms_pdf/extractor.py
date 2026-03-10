@@ -459,6 +459,8 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
+    _POSITION_TOLERANCE = 5.0  # Points tolerance for considering positions identical
+
     def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
         """Sort fields by page number and position.
 
@@ -467,19 +469,30 @@ class PDFFormExtractor:
         2. Y position (descending - top to bottom in PDF coordinates)
         3. X position (ascending - left to right)
 
+        Fields with positions within +/- _POSITION_TOLERANCE (5 points)
+        are considered to be at the same position for sorting purposes.
+        This handles fields that are visually aligned but have slightly
+        different coordinates due to PDF generation variations.
+
         Args:
             fields: List of PDFField objects to sort.
 
         Returns:
             Sorted list of PDFField objects.
         """
+        tolerance = self._POSITION_TOLERANCE
 
         def sort_key(field: PDFField) -> tuple[int, float, float]:
             page = field.pages[0] if field.pages else 1
             if field.geometry:
+                # Quantize coordinates to tolerance buckets so positions
+                # within +/- tolerance are treated as identical for sorting
+                # Use rounding to create consistent buckets
+                y_quantized = round(field.geometry.y / tolerance) * tolerance
+                x_quantized = round(field.geometry.x / tolerance) * tolerance
                 # Y is descending (higher Y = higher on page)
                 # X is ascending (left to right)
-                return (page, -field.geometry.y, field.geometry.x)
+                return (page, -y_quantized, x_quantized)
             return (page, 0.0, 0.0)
 
         return sorted(fields, key=sort_key)
