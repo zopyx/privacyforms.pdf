@@ -115,11 +115,25 @@ def encrypt_command(
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else "Failed to encrypt PDF"
+
+        # pdfcpu binary not found
         if "command not found" in error_msg.lower() or "not recognized" in error_msg.lower():
             raise click.ClickException(
                 f"pdfcpu not found at '{pdfcpu_path}'. "
                 "Please install pdfcpu or provide the correct path with --pdfcpu-path"
             ) from e
+
+        # PDF processing errors - malformed form fields
+        if "required entry" in error_msg.lower() or "dict=" in error_msg.lower():
+            raise click.ClickException(
+                f"pdfcpu could not process this PDF: {error_msg}\n\n"
+                "This error often occurs when:\n"
+                "  1. The PDF has malformed form fields\n"
+                "  2. The PDF is corrupted\n\n"
+                "Try using the fill-form command first to normalize the PDF, "
+                "or use a different PDF tool to fix the form fields."
+            ) from e
+
         raise click.ClickException(f"Encryption failed: {error_msg}") from e
     except FileNotFoundError as e:
         raise click.ClickException(

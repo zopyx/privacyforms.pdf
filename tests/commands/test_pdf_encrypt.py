@@ -111,7 +111,9 @@ class TestEncryptCommand:
 
         with patch(
             "subprocess.run",
-            side_effect=CalledProcessError(1, ["pdfcpu"], stderr="command not found"),
+            side_effect=CalledProcessError(
+                1, ["pdfcpu"], stderr="command not found"
+            ),
         ):
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
@@ -206,3 +208,21 @@ class TestEncryptCommand:
         assert "user-password" in result.output.lower() or "upw" in result.output.lower()
         assert "mode" in result.output.lower()
         assert "encrypt" in result.output.lower()
+
+    def test_encrypt_pdf_processing_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test encrypt command handles PDF processing errors (malformed form fields)."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        from subprocess import CalledProcessError
+
+        with patch(
+            "subprocess.run",
+            side_effect=CalledProcessError(
+                1, ["pdfcpu"], stderr="dict=formFieldDict required entry=DA missing"
+            ),
+        ):
+            result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
+            assert result.exit_code != 0
+            assert "pdfcpu could not process" in result.output.lower()
+            assert "malformed form fields" in result.output.lower()
