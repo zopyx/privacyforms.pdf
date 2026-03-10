@@ -2614,3 +2614,132 @@ class TestExtractorCoverageHelpers:
         data = cast("StreamObject", stream).get_data().decode("latin1")
         assert "/F1" in data
         assert "0.600006 0.756866 0.854904 rg" not in data
+
+
+class TestClusterYPositions:
+    """Tests for the cluster_y_positions function."""
+
+    def test_empty_list(self) -> None:
+        """Test cluster_y_positions with empty list."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([])
+        assert result == {}
+
+    def test_single_position(self) -> None:
+        """Test cluster_y_positions with single position."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0])
+        assert result == {100.0: 100.0}
+
+    def test_duplicate_positions(self) -> None:
+        """Test cluster_y_positions with duplicate positions."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 100.0, 100.0])
+        assert result == {100.0: 100.0}
+
+    def test_two_close_positions(self) -> None:
+        """Test cluster_y_positions with two close positions (same cluster)."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 105.0])
+        # With default threshold of 15, these should be clustered together
+        assert result[100.0] == result[105.0]
+
+    def test_two_far_positions(self) -> None:
+        """Test cluster_y_positions with two far positions (different clusters)."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 200.0])
+        # These should be in different clusters
+        assert result[100.0] != result[200.0]
+
+    def test_multiple_clusters(self) -> None:
+        """Test cluster_y_positions with multiple distinct clusters."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        # Three rows: 100-105, 200-210, 300
+        positions = [100.0, 105.0, 200.0, 210.0, 300.0]
+        result = cluster_y_positions(positions)
+        # First cluster
+        assert result[100.0] == result[105.0]
+        # Second cluster
+        assert result[200.0] == result[210.0]
+        # All clusters are different
+        assert result[100.0] != result[200.0]
+        assert result[200.0] != result[300.0]
+
+
+class TestRowYProperty:
+    """Tests for the row_y property on FieldGeometry."""
+
+    def test_row_y_defaults_to_y(self) -> None:
+        """Test row_y returns y when not explicitly set."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        assert geometry.row_y == 100.0
+
+    def test_row_y_returns_set_value(self) -> None:
+        """Test row_y returns the value set via set_row_y."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry.set_row_y(150.0)
+        assert geometry.row_y == 150.0
+
+    def test_row_y_in_model_dump(self) -> None:
+        """Test row_y is included in model_dump output."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry.set_row_y(150.0)
+        data = geometry.model_dump()
+        assert "row_y" in data
+        assert data["row_y"] == 150.0
+
+
+class TestComputeAndSetRowClusters:
+    """Tests for _compute_and_set_row_clusters method."""
+
+    def test_compute_row_clusters(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters sets row_y on geometries."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        # Create mock fields with geometries
+        geometry1 = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry2 = FieldGeometry(page=1, rect=(60.0, 105.0, 100.0, 135.0))
+        geometry3 = FieldGeometry(page=1, rect=(10.0, 200.0, 50.0, 230.0))
+
+        fields = [
+            PDFField(name="Field1", id="1", type="textfield", geometry=geometry1, pages=[1]),
+            PDFField(name="Field2", id="2", type="textfield", geometry=geometry2, pages=[1]),
+            PDFField(name="Field3", id="3", type="textfield", geometry=geometry3, pages=[1]),
+        ]
+
+        extractor._compute_and_set_row_clusters(fields)
+
+        # Field1 and Field2 should have same row_y (clustered)
+        assert geometry1.row_y == geometry2.row_y
+        # Field3 should have different row_y
+        assert geometry1.row_y != geometry3.row_y
+
+    def test_compute_row_clusters_no_geometry(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters handles fields without geometry."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        fields = [
+            PDFField(name="Field1", id="1", type="textfield", geometry=None, pages=[1]),
+        ]
+
+        # Should not raise an error
+        extractor._compute_and_set_row_clusters(fields)
+
+    def test_compute_row_clusters_empty(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters with empty field list."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        # Should not raise an error
+        extractor._compute_and_set_row_clusters([])
