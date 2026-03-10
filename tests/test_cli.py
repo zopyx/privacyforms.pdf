@@ -14,22 +14,34 @@ from privacyforms_pdf.extractor import PDFFormExtractor
 
 # Import all test classes from the commands tests for backwards compatibility
 from tests.commands.test_pdf_check import TestCheckCommand
+from tests.commands.test_pdf_encrypt import TestEncryptCommand
 from tests.commands.test_pdf_extract import TestExtractCommand
 from tests.commands.test_pdf_fill_form import TestFillFormCommand
 from tests.commands.test_pdf_get_value import TestGetValueCommand
 from tests.commands.test_pdf_info import TestInfoCommand
 from tests.commands.test_pdf_list_fields import TestListFieldsCommand
+from tests.commands.test_pdf_list_permissions import (
+    TestListPermissionsCommand,
+    TestPermissionFormatter,
+    TestPermissionParser,
+)
+from tests.commands.test_pdf_set_permissions import TestSetPermissionsCommand
 
 # Re-export for backwards compatibility
 __all__ = [
     "TestCheckCommand",
     "TestCreateExtractor",
+    "TestEncryptCommand",
     "TestExtractCommand",
     "TestFillFormCommand",
     "TestGetValueCommand",
     "TestInfoCommand",
     "TestListFieldsCommand",
+    "TestListPermissionsCommand",
     "TestMainCommand",
+    "TestPermissionFormatter",
+    "TestPermissionParser",
+    "TestSetPermissionsCommand",
 ]
 
 

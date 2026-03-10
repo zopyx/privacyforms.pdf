@@ -9,11 +9,14 @@ import click
 from .commands import (
     check_command,
     create_extractor,
+    encrypt_command,
     extract_command,
     fill_form_command,
     get_value_command,
     info_command,
     list_fields_command,
+    list_permissions_command,
+    set_permissions_command,
 )
 from .extractor import (
     FormValidationError,
@@ -51,11 +54,14 @@ def main(ctx: click.Context) -> None:
 
 # Register commands
 main.add_command(check_command)
+main.add_command(encrypt_command)
 main.add_command(extract_command)
 main.add_command(list_fields_command)
+main.add_command(list_permissions_command)
 main.add_command(get_value_command)
 main.add_command(info_command)
 main.add_command(fill_form_command)
+main.add_command(set_permissions_command)
 
 
 if __name__ == "__main__":  # pragma: no cover
