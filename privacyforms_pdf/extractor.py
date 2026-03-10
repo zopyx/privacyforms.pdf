@@ -86,10 +86,14 @@ class FieldGeometry(BaseModel):
         width: Field width in points.
         height: Field height in points.
         units: Unit of measurement (always "pt" for points).
+        normalized_y: Y position quantized to 5-point buckets for row grouping.
     """
 
     page: int
     rect: tuple[float, float, float, float]
+
+    # Tolerance for position normalization (5 PDF points)
+    _POSITION_TOLERANCE: float = 5.0
 
     @property
     def x(self) -> float:
@@ -111,11 +115,21 @@ class FieldGeometry(BaseModel):
         """Field height in points."""
         return self.rect[3] - self.rect[1]
 
+    @property
+    def normalized_y(self) -> float:
+        """Y position quantized to tolerance buckets for row grouping.
+
+        Fields with normalized_y values within +/- tolerance are considered
+        to be on the same visual row for sorting and display purposes.
+        """
+        tolerance = self._POSITION_TOLERANCE
+        return round(self.y / tolerance) * tolerance
+
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG002
         """Convert to dictionary for JSON serialization.
 
         Returns:
-            Dictionary with page, rect, x, y, width, height, units.
+            Dictionary with page, rect, x, y, width, height, normalized_y, units.
         """
         return {
             "page": self.page,
@@ -124,6 +138,7 @@ class FieldGeometry(BaseModel):
             "y": self.y,
             "width": self.width,
             "height": self.height,
+            "normalized_y": self.normalized_y,
             "units": "pt",
         }
 
