@@ -86,14 +86,14 @@ class FieldGeometry(BaseModel):
         width: Field width in points.
         height: Field height in points.
         units: Unit of measurement (always "pt" for points).
-        normalized_y: Y position quantized to 5-point buckets for row grouping.
+        normalized_y: Y position quantized to 15-point buckets for row grouping.
     """
 
     page: int
     rect: tuple[float, float, float, float]
 
-    # Tolerance for position normalization (5 PDF points)
-    _POSITION_TOLERANCE: float = 5.0
+    # Tolerance for position normalization (15 PDF points)
+    _POSITION_TOLERANCE: float = 15.0
 
     @property
     def x(self) -> float:
@@ -474,7 +474,7 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
-    _POSITION_TOLERANCE = 5.0  # Points tolerance for considering positions identical
+    _POSITION_TOLERANCE = 15.0  # Points tolerance for considering positions identical
 
     def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
         """Sort fields by page number and position.
@@ -484,7 +484,7 @@ class PDFFormExtractor:
         2. Y position (descending - top to bottom in PDF coordinates)
         3. X position (ascending - left to right)
 
-        Fields with positions within +/- _POSITION_TOLERANCE (5 points)
+        Fields with positions within +/- _POSITION_TOLERANCE (15 points)
         are considered to be at the same position for sorting purposes.
         This handles fields that are visually aligned but have slightly
         different coordinates due to PDF generation variations.

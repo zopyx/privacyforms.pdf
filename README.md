@@ -226,7 +226,7 @@ Represents the geometry (position and size) of a form field.
 - `y: float`: Bottom coordinate (PDF coordinate system).
 - `width: float`: Field width in points.
 - `height: float`: Field height in points.
-- `normalized_y: float`: Y position quantized to 5-point buckets for row grouping.
+- `normalized_y: float`: Y position quantized to 15-point buckets for row grouping.
 - `units: str`: Unit of measurement (always "pt" for points).
 
 ### JSON Export Format
@@ -277,7 +277,7 @@ The `geometry` object contains the field's position and size in PDF points (1/72
 - `rect`: Array of `[x0, y0, x1, y1]` coordinates
 - `x`, `y`: Bottom-left corner position
 - `width`, `height`: Field dimensions
-- `normalized_y`: Y position quantized to 5-point buckets (fields within ±5 points share the same value, useful for grouping fields by row)
+- `normalized_y`: Y position quantized to 15-point buckets (fields within ±15 points share the same value, useful for grouping fields by row)
 - Note: PDF coordinates have origin (0,0) at bottom-left of the page
 - `width: float`: Field width in points.
 - `height: float`: Field height in points.
