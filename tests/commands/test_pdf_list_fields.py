@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
-
-from click.testing import CliRunner
 
 from privacyforms_pdf.cli import main
 from privacyforms_pdf.extractor import FieldGeometry, PDFField, PDFFormError, PDFFormNotFoundError
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from click.testing import CliRunner
 
 
 class TestListFieldsCommand:

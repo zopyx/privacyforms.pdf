@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from click.testing import CliRunner
-
 from privacyforms_pdf.cli import main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from click.testing import CliRunner
 
 
 class TestSetPermissionsCommand:
@@ -64,8 +67,6 @@ class TestSetPermissionsCommand:
             )
             assert result.exit_code == 0
             assert "preset: print" in result.output.lower()
-
-
 
     def test_set_permissions_custom_bits_hex(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test setting custom permission bits in hex."""

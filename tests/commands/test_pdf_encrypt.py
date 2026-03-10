@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from click.testing import CliRunner
-
 from privacyforms_pdf.cli import main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from click.testing import CliRunner
 
 
 class TestEncryptCommand:
@@ -111,9 +114,7 @@ class TestEncryptCommand:
 
         with patch(
             "subprocess.run",
-            side_effect=CalledProcessError(
-                1, ["pdfcpu"], stderr="command not found"
-            ),
+            side_effect=CalledProcessError(1, ["pdfcpu"], stderr="command not found"),
         ):
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0

@@ -6,11 +6,14 @@ New tests should be added to the appropriate tests/commands/test_pdf_*.py file.
 
 from __future__ import annotations
 
-from click.testing import CliRunner
+from typing import TYPE_CHECKING
 
 from privacyforms_pdf.cli import main
 from privacyforms_pdf.commands.utils import create_extractor
 from privacyforms_pdf.extractor import PDFFormExtractor
+
+if TYPE_CHECKING:
+    from click.testing import CliRunner
 
 # Import all test classes from the commands tests for backwards compatibility
 from tests.commands.test_pdf_check import TestCheckCommand
