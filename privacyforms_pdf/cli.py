@@ -251,6 +251,17 @@ def info(ctx: click.Context, pdf_path: Path) -> None:  # noqa: ARG001
     default=False,
     help="Require all form fields to be provided (default: not strict)",
 )
+@click.option(
+    "--pdfcpu",
+    "use_pdfcpu",
+    is_flag=True,
+    help="Use pdfcpu for form filling instead of pypdf",
+)
+@click.option(
+    "--pdfcpu-path",
+    default="pdfcpu",
+    help="Path to the pdfcpu binary (default: pdfcpu)",
+)
 @click.pass_context
 def fill_form(
     ctx: click.Context,  # noqa: ARG001
@@ -259,6 +270,8 @@ def fill_form(
     output: Path | None,
     validate: bool,
     strict: bool,
+    use_pdfcpu: bool,
+    pdfcpu_path: str,
 ) -> None:
     """Fill a PDF form with data from a JSON file.
 
@@ -274,6 +287,7 @@ def fill_form(
         pdf-forms fill-form form.pdf data.json -o filled.pdf
         pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
         pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
+        pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu
     """
     extractor = create_extractor()
 
@@ -295,8 +309,17 @@ def fill_form(
 
             click.echo("✓ Form data validation passed")
 
-        # Fill the form
-        extractor.fill_form(pdf_path, form_data, output, validate=False)
+        # Fill the form using pdfcpu or pypdf
+        if use_pdfcpu:
+            extractor.fill_form_with_pdfcpu(
+                pdf_path, form_data, output, validate=False, pdfcpu_path=pdfcpu_path
+            )
+            if extractor.last_fill_backend == "pypdf-fallback":
+                click.echo("! pdfcpu could not process this form; filled using pypdf fallback")
+            else:
+                click.echo("✓ Form filled using pdfcpu")
+        else:
+            extractor.fill_form(pdf_path, form_data, output, validate=False)
 
         if output:
             click.echo(f"✓ Form filled and saved to: {output}")
@@ -308,7 +331,8 @@ def fill_form(
     except FormValidationError as e:
         raise click.ClickException(str(e)) from e
     except PDFFormError as e:
-        raise click.ClickException("Failed to fill form.") from e
+        error_msg = str(e) if str(e) else "Failed to fill form."
+        raise click.ClickException(error_msg) from e
     except json.JSONDecodeError as e:
         raise click.ClickException(f"Invalid JSON file: {e}") from e
 

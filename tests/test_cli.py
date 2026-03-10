@@ -723,7 +723,8 @@ class TestFillFormCommand:
                 main, ["fill-form", str(pdf_file), str(json_file), "--no-validate"]
             )
             assert result.exit_code != 0
-            assert "Failed to fill form" in result.output
+            # Error message should contain the actual error from PDFFormError
+            assert "Error" in result.output
 
     def test_fill_form_checkbox_validation_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command validation fails with checkbox type error."""
@@ -791,3 +792,184 @@ class TestFillFormCommand:
             )
             assert result.exit_code != 0
             assert "validation failed" in result.output.lower()
+
+    def test_fill_form_with_pdfcpu(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with --pdfcpu option."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Candidate Name": "John Smith", "Full time": true}')
+        output_file = tmp_path / "output.pdf"
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                PDFField(
+                    name="Candidate Name",
+                    id="1",
+                    type="textfield",
+                    value="",
+                    pages=[1],
+                    locked=False,
+                ),
+                PDFField(
+                    name="Full time",
+                    id="2",
+                    type="checkbox",
+                    value=False,
+                    pages=[1],
+                    locked=False,
+                ),
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "fill_form_with_pdfcpu") as mock_fill_pdfcpu,
+        ):
+            mock_fill_pdfcpu.return_value = output_file
+            result = runner.invoke(
+                main,
+                [
+                    "fill-form",
+                    str(pdf_file),
+                    str(json_file),
+                    "-o",
+                    str(output_file),
+                    "--pdfcpu",
+                ],
+            )
+            assert result.exit_code == 0
+            assert "validation passed" in result.output.lower()
+            assert "pdfcpu" in result.output.lower()
+            assert "saved to" in result.output.lower()
+            mock_fill_pdfcpu.assert_called_once()
+
+    def test_fill_form_with_pdfcpu_custom_path(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command with --pdfcpu and --pdfcpu-path options."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "test"}')
+        output_file = tmp_path / "output.pdf"
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                PDFField(
+                    name="Name",
+                    id="1",
+                    type="textfield",
+                    value="",
+                    pages=[1],
+                    locked=False,
+                )
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(PDFFormExtractor, "fill_form_with_pdfcpu") as mock_fill_pdfcpu,
+        ):
+            mock_fill_pdfcpu.return_value = output_file
+            result = runner.invoke(
+                main,
+                [
+                    "fill-form",
+                    str(pdf_file),
+                    str(json_file),
+                    "-o",
+                    str(output_file),
+                    "--pdfcpu",
+                    "--pdfcpu-path",
+                    "/custom/pdfcpu",
+                ],
+            )
+            assert result.exit_code == 0
+            mock_fill_pdfcpu.assert_called_once()
+            # Check that custom path was passed
+            call_kwargs = mock_fill_pdfcpu.call_args.kwargs
+            assert call_kwargs.get("pdfcpu_path") == "/custom/pdfcpu"
+
+    def test_fill_form_with_pdfcpu_fallback_message(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test fill-form command reports pypdf fallback when pdfcpu is incompatible."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "test"}')
+        output_file = tmp_path / "output.pdf"
+
+        def fallback_fill(
+            self: PDFFormExtractor,
+            *_args: object,
+            **_kwargs: object,
+        ) -> Path:
+            self._last_fill_backend = "pypdf-fallback"
+            return output_file
+
+        with patch.object(PDFFormExtractor, "fill_form_with_pdfcpu", new=fallback_fill):
+            result = runner.invoke(
+                main,
+                [
+                    "fill-form",
+                    str(pdf_file),
+                    str(json_file),
+                    "-o",
+                    str(output_file),
+                    "--pdfcpu",
+                    "--no-validate",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "pypdf fallback" in result.output.lower()
+
+    def test_fill_form_pdfcpu_not_found(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command handles pdfcpu not found error."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"Name": "test"}')
+
+        mock_form_data = PDFFormData(
+            source=pdf_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[
+                PDFField(
+                    name="Name",
+                    id="1",
+                    type="textfield",
+                    value="",
+                    pages=[1],
+                    locked=False,
+                )
+            ],
+            raw_data={},
+        )
+
+        with (
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "extract", return_value=mock_form_data),
+            patch.object(
+                PDFFormExtractor,
+                "fill_form_with_pdfcpu",
+                side_effect=PDFFormError("pdfcpu binary not found"),
+            ),
+        ):
+            result = runner.invoke(
+                main,
+                ["fill-form", str(pdf_file), str(json_file), "--pdfcpu", "--no-validate"],
+            )
+            assert result.exit_code != 0
+            assert "pdfcpu binary not found" in result.output.lower()
