@@ -10,7 +10,7 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 ## Features
 
 - Extract form data from PDF files using pure Python (no external dependencies)
-- Fill PDF forms programmatically
+- Fill PDF forms programmatically using pypdf or pdfcpu
 - Extract field geometry (position and size) information
 - Command-line interface with multiple commands
 - Full type hints and comprehensive test coverage (99%)
@@ -20,6 +20,20 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 
 - Python 3.14+
 - pypdf >= 5.0
+- pdfcpu >= 0.9 (optional, for `--pdfcpu` fill-form option)
+
+### Optional: Installing pdfcpu
+
+pdfcpu is only required if you want to use the `--pdfcpu` option for filling forms.
+It can handle some PDFs that pypdf may have issues with.
+
+```bash
+# macOS
+brew install pdfcpu
+
+# Or download from https://github.com/pdfcpu/pdfcpu/releases
+# Make sure pdfcpu is in your PATH
+```
 
 ## Installation
 
@@ -69,6 +83,12 @@ pdf-forms fill-form form.pdf data.json
 
 # Fill with strict mode (requires all form fields)
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
+
+# Fill using pdfcpu instead of pypdf (requires pdfcpu to be installed)
+pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu
+
+# Fill using a custom pdfcpu binary path
+pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu --pdfcpu-path /usr/local/bin/pdfcpu
 ```
 
 #### JSON Format
@@ -130,6 +150,12 @@ extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
 errors = extractor.validate_form_data("form.pdf", form_data)
 if errors:
     print("Validation errors:", errors)
+
+# Fill a form using pdfcpu (requires pdfcpu to be installed)
+# This can be useful when pypdf has issues with certain PDFs
+from privacyforms_pdf import is_pdfcpu_available
+if is_pdfcpu_available():
+    extractor.fill_form_with_pdfcpu("form.pdf", form_data, "filled.pdf")
 ```
 
 ## API Reference
@@ -160,8 +186,9 @@ extractor = PDFFormExtractor(
 - `get_field_by_id(pdf_path: str | Path, field_id: str) -> PDFField | None`: Get a form field by its ID.
 - `get_field_by_name(pdf_path: str | Path, field_name: str) -> PDFField | None`: Get a form field by its name.
 - `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
-- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data.
-- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file.
+- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data using pypdf.
+- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file using pypdf.
+- `fill_form_with_pdfcpu(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True, pdfcpu_path: str = "pdfcpu") -> Path`: Fill a PDF form with data using pdfcpu binary.
 
 ### Data Classes
 
@@ -263,6 +290,12 @@ The `geometry` object contains the field's position and size in PDF points (1/72
 - `PDFCPUError` (alias for `PDFFormError`)
 - `PDFCPUNotFoundError` (alias for `PDFFormError`)
 - `PDFCPUExecutionError` (alias for `PDFFormError`)
+
+### Utility Functions
+
+- `is_pdfcpu_available(pdfcpu_path: str = "pdfcpu") -> bool`: Check if pdfcpu binary is available in the system PATH.
+- `get_available_geometry_backends() -> list[str]`: Return list of available geometry backends (always `["pypdf"]`).
+- `has_geometry_support() -> bool`: Check if geometry extraction is supported (always `True`).
 
 ## Development
 
