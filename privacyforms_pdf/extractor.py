@@ -849,10 +849,7 @@ class PDFFormExtractor:
     def _should_fallback_from_pdfcpu(error_message: str) -> bool:
         """Return True for known pdfcpu form-compatibility failures."""
         normalized = error_message.lower()
-        return (
-            "required entry=da missing" in normalized
-            or "unexpected panic attack" in normalized
-        )
+        return "required entry=da missing" in normalized or "unexpected panic attack" in normalized
 
     def fill_form(
         self,

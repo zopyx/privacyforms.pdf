@@ -1387,9 +1387,7 @@ class TestFillFormWithPdfcpu:
                 extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, validate=False)
             assert "pdfcpu failed" in str(exc_info.value)
 
-    def test_fill_form_with_pdfcpu_falls_back_to_pypdf_on_missing_da(
-        self, tmp_path: Path
-    ) -> None:
+    def test_fill_form_with_pdfcpu_falls_back_to_pypdf_on_missing_da(self, tmp_path: Path) -> None:
         """Test fill_form_with_pdfcpu falls back when pdfcpu rejects missing /DA."""
         extractor = PDFFormExtractor()
         test_file = tmp_path / "test.pdf"

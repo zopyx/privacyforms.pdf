@@ -65,30 +65,7 @@ class TestSetPermissionsCommand:
             assert result.exit_code == 0
             assert "preset: print" in result.output.lower()
 
-    def test_set_permissions_with_output(self, runner: CliRunner, tmp_path: Path) -> None:
-        """Test setting permissions with output file."""
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_text("fake pdf content")
-        output_file = tmp_path / "output.pdf"
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = "writing output.pdf ..."
-            mock_run.return_value.stderr = ""
-            result = runner.invoke(
-                main,
-                [
-                    "set-permissions",
-                    str(pdf_file),
-                    str(output_file),
-                    "-opw",
-                    "ownerpass",
-                    "--permissions",
-                    "all",
-                ],
-            )
-            assert result.exit_code == 0
-            assert "saved to" in result.output.lower()
 
     def test_set_permissions_custom_bits_hex(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test setting custom permission bits in hex."""

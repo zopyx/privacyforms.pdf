@@ -71,7 +71,6 @@ def build_permission_bits(
 
 @click.command(name="set-permissions")
 @click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
-@click.argument("output_path", type=click.Path(path_type=Path), required=False)
 @click.option(
     "--owner-password",
     "-opw",
@@ -153,7 +152,6 @@ def build_permission_bits(
 def set_permissions_command(
     ctx: click.Context,  # noqa: ARG001
     pdf_path: Path,
-    output_path: Path | None,
     owner_password: str,
     user_password: str | None,
     permissions: str | None,
@@ -171,7 +169,7 @@ def set_permissions_command(
     """Set permissions of an encrypted PDF file using pdfcpu.
 
     PDF_PATH is the path to the encrypted PDF file to modify.
-    OUTPUT_PATH is the optional output path (modifies input if not provided).
+    The file is modified in place.
 
     This command requires pdfcpu to be installed. The owner password is
     mandatory to modify permissions.
@@ -243,10 +241,8 @@ def set_permissions_command(
         cmd.extend(["-upw", user_password])
     cmd.extend(["-opw", owner_password])
 
-    # Add input and output files
+    # Add input file (pdfcpu permissions set modifies in place)
     cmd.append(str(pdf_path))
-    if output_path:
-        cmd.append(str(output_path))
 
     try:
         result = subprocess.run(
@@ -294,10 +290,7 @@ def set_permissions_command(
             raise click.ClickException(f"Failed to set permissions: {error_msg}") from None
 
         # Success
-        if output_path:
-            click.echo(f"✓ Permissions set and saved to: {output_path}")
-        else:
-            click.echo(f"✓ Permissions updated: {pdf_path}")
+        click.echo(f"✓ Permissions updated: {pdf_path}")
 
         # Show what was set
         if custom_bits:

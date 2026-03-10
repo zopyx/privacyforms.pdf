@@ -8,7 +8,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from privacyforms_pdf.cli import main
-from privacyforms_pdf.extractor import FieldGeometry, PDFFormError, PDFFormNotFoundError, PDFField
+from privacyforms_pdf.extractor import FieldGeometry, PDFField, PDFFormError, PDFFormNotFoundError
 
 
 class TestListFieldsCommand:

@@ -1,0 +1,733 @@
+{
+  "source": "forms.pdf",
+  "pdf_version": "1.5",
+  "has_form": true,
+  "fields": [
+    {
+      "name": "Form1",
+      "id": "1",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": null,
+      "format": null,
+      "options": [
+        "/Filter",
+        "/Type",
+        "/Subtype",
+        "/FormType",
+        "/Resources",
+        "/BBox",
+        "/coding",
+        "/design",
+        "/music",
+        "/sports"
+      ]
+    },
+    {
+      "name": "text",
+      "id": "2",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          595.375,
+          527.25,
+          611.875
+        ],
+        "x": 84.75,
+        "y": 595.375,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "email",
+      "id": "3",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          546.8828,
+          527.25,
+          563.3828
+        ],
+        "x": 84.75,
+        "y": 546.8828,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "password",
+      "id": "4",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          498.3906,
+          527.25,
+          514.8906
+        ],
+        "x": 84.75,
+        "y": 498.3906,
+        "width": 442.5,
+        "height": 16.499999999999943,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "tel",
+      "id": "5",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          449.8984,
+          527.25,
+          466.3984
+        ],
+        "x": 84.75,
+        "y": 449.8984,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "url",
+      "id": "6",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          401.4062,
+          527.25,
+          417.9062
+        ],
+        "x": 84.75,
+        "y": 401.4062,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "search",
+      "id": "7",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          352.9141,
+          527.25,
+          369.4141
+        ],
+        "x": 84.75,
+        "y": 352.9141,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "number",
+      "id": "8",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          243.8594,
+          527.25,
+          260.3594
+        ],
+        "x": 84.75,
+        "y": 243.8594,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "quantity",
+      "id": "9",
+      "field_type": "textfield",
+      "value": true,
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          195.3672,
+          527.25,
+          211.8672
+        ],
+        "x": 84.75,
+        "y": 195.3672,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "price",
+      "id": "10",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 1,
+        "rect": [
+          84.75,
+          146.875,
+          527.25,
+          163.375
+        ],
+        "x": 84.75,
+        "y": 146.875,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "date",
+      "id": "11",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          658.875,
+          306.0,
+          675.375
+        ],
+        "x": 84.75,
+        "y": 658.875,
+        "width": 221.25,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "time",
+      "id": "12",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          306.0,
+          658.875,
+          527.25,
+          675.375
+        ],
+        "x": 306.0,
+        "y": 658.875,
+        "width": 221.25,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "datetime-local",
+      "id": "13",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          610.3828,
+          306.0,
+          626.8828
+        ],
+        "x": 84.75,
+        "y": 610.3828,
+        "width": 221.25,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "month",
+      "id": "14",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          306.0,
+          610.3828,
+          527.25,
+          626.8828
+        ],
+        "x": 306.0,
+        "y": 610.3828,
+        "width": 221.25,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "week",
+      "id": "15",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          561.8906,
+          527.25,
+          578.3906
+        ],
+        "x": 84.75,
+        "y": 561.8906,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "country",
+      "id": "16",
+      "field_type": "listbox",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          441.2859,
+          527.25,
+          469.3359
+        ],
+        "x": 84.75,
+        "y": 441.2859,
+        "width": 442.5,
+        "height": 28.049999999999955,
+        "units": "pt"
+      },
+      "format": null,
+      "options": [
+        "-- Select a country --",
+        "United States",
+        "Canada",
+        "Mexico",
+        "United Kingdom",
+        "Germany",
+        "France",
+        "Japan",
+        "China"
+      ]
+    },
+    {
+      "name": "browser",
+      "id": "17",
+      "field_type": "combobox",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          395.7234,
+          527.25,
+          412.2234
+        ],
+        "x": 84.75,
+        "y": 395.7234,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": [
+        "Chrome",
+        "Firefox",
+        "Safari",
+        "Edge",
+        "Opera"
+      ]
+    },
+    {
+      "name": "multi",
+      "id": "18",
+      "field_type": "listbox",
+      "value": "",
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          84.75,
+          301.0312,
+          527.25,
+          363.7313
+        ],
+        "x": 84.75,
+        "y": 301.0312,
+        "width": 442.5,
+        "height": 62.70009999999996,
+        "units": "pt"
+      },
+      "format": null,
+      "options": [
+        "Option 1",
+        "Option 2",
+        "Option 3",
+        "Option 4"
+      ]
+    },
+    {
+      "name": "interests",
+      "id": "19",
+      "field_type": "checkbox",
+      "value": false,
+      "pages": [
+        2
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 2,
+        "rect": [
+          93.0,
+          186.1641,
+          103.5,
+          186.1641
+        ],
+        "x": 93.0,
+        "y": 186.1641,
+        "width": 10.5,
+        "height": 0.0,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "gender",
+      "id": "20",
+      "field_type": "checkbox",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": null,
+      "format": null,
+      "options": [
+        "/male",
+        "/female",
+        "/other",
+        "/prefer-not"
+      ]
+    },
+    {
+      "name": "color",
+      "id": "21",
+      "field_type": "textfield",
+      "value": "#4CAF50",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          488.8125,
+          527.25,
+          518.8125
+        ],
+        "x": 84.75,
+        "y": 488.8125,
+        "width": 442.5,
+        "height": 30.0,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "range",
+      "id": "22",
+      "field_type": "textfield",
+      "value": "50",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          446.5084,
+          527.25,
+          459.1084
+        ],
+        "x": 84.75,
+        "y": 446.5084,
+        "width": 442.5,
+        "height": 12.600000000000023,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "file",
+      "id": "23",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          386.0625,
+          527.25,
+          402.5625
+        ],
+        "x": 84.75,
+        "y": 386.0625,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "files",
+      "id": "24",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          337.5703,
+          527.25,
+          354.0703
+        ],
+        "x": 84.75,
+        "y": 337.5703,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "hidden",
+      "id": "25",
+      "field_type": "textfield",
+      "value": "hidden-value",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          289.0781,
+          527.25,
+          305.5781
+        ],
+        "x": 84.75,
+        "y": 289.0781,
+        "width": 442.5,
+        "height": 16.5,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "message",
+      "id": "26",
+      "field_type": "textfield",
+      "value": "",
+      "pages": [
+        3
+      ],
+      "locked": false,
+      "geometry": {
+        "page": 3,
+        "rect": [
+          84.75,
+          124.7109,
+          527.25,
+          182.4609
+        ],
+        "x": 84.75,
+        "y": 124.7109,
+        "width": 442.5,
+        "height": 57.750000000000014,
+        "units": "pt"
+      },
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "Form1.Button1",
+      "id": "27",
+      "field_type": "checkbox",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": null,
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "Form1.Button2",
+      "id": "28",
+      "field_type": "checkbox",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": null,
+      "format": null,
+      "options": []
+    },
+    {
+      "name": "Form1.Button3",
+      "id": "29",
+      "field_type": "checkbox",
+      "value": "",
+      "pages": [
+        1
+      ],
+      "locked": false,
+      "geometry": null,
+      "format": null,
+      "options": []
+    }
+  ]
+}
