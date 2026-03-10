@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from ..extractor import PDFField, PDFFormError, PDFFormNotFoundError
 from .utils import create_extractor
@@ -55,33 +57,40 @@ def list_fields_command(
             click.echo("No form fields found.")
             return
 
-        # Calculate column widths for alignment
-        type_width = max(len(f.field_type) for f in fields) + 2
-        name_width = max(len(f.name) for f in fields) + 2
+        # Create Rich table
+        table = Table(
+            title=f"Form Fields in {pdf_path.name}", show_header=True, header_style="bold"
+        )
 
-        # Print header
-        header = f"{'Type':<{type_width}} {'Name':<{name_width}} Value"
+        # Add columns
+        table.add_column("Type", style="cyan", no_wrap=True)
+        table.add_column("Name", style="green")
+        table.add_column("Value", style="yellow")
         if geometry:
-            header += "     Page  Position (x, y)     Size (w×h)"
-        click.echo(header)
-        click.echo("=" * len(header) * 2)
+            table.add_column("Page", justify="right", style="magenta")
+            table.add_column("Position (x, y)", justify="center", style="blue")
+            table.add_column("Size (w×h)", justify="center", style="blue")
 
-        # Print fields
+        # Add rows
         for field in fields:
             value_str = _format_list_fields_value(field)
-            line = f"{field.field_type:<{type_width}} {field.name:<{name_width}} {value_str}"
+            row = [field.field_type, field.name, value_str]
 
-            if geometry and field.geometry:
-                geom = field.geometry
-                pos = f"({geom.x:.1f}, {geom.y:.1f})"
-                size = f"{geom.width:.1f}×{geom.height:.1f}"
-                line += f"    {geom.page:>3}  {pos:<18}  {size}"
-            elif geometry:
-                line += "    N/A"
+            if geometry:
+                if field.geometry:
+                    geom = field.geometry
+                    pos = f"({geom.x:.1f}, {geom.y:.1f})"
+                    size = f"{geom.width:.1f}×{geom.height:.1f}"
+                    row.extend([str(geom.page), pos, size])
+                else:
+                    row.extend(["N/A", "N/A", "N/A"])
 
-            click.echo(line)
+            table.add_row(*row)
 
-        click.echo(f"\nTotal fields: {len(fields)}")
+        # Print table
+        console = Console()
+        console.print(table)
+        console.print(f"\nTotal fields: {len(fields)}")
 
     except PDFFormNotFoundError as e:
         raise click.ClickException(str(e)) from e
