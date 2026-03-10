@@ -459,12 +459,40 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
+    def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
+        """Sort fields by page number and position.
+
+        Sorting order:
+        1. Page number (ascending)
+        2. Y position (descending - top to bottom in PDF coordinates)
+        3. X position (ascending - left to right)
+
+        Args:
+            fields: List of PDFField objects to sort.
+
+        Returns:
+            Sorted list of PDFField objects.
+        """
+
+        def sort_key(field: PDFField) -> tuple[int, float, float]:
+            page = field.pages[0] if field.pages else 1
+            if field.geometry:
+                # Y is descending (higher Y = higher on page)
+                # X is ascending (left to right)
+                return (page, -field.geometry.y, field.geometry.x)
+            return (page, 0.0, 0.0)
+
+        return sorted(fields, key=sort_key)
+
     def extract(self, pdf_path: str | Path) -> PDFFormData:
         """Extract form data from a PDF file.
 
         This method extracts form data from the PDF using pypdf and
         parses it into a structured format. If extract_geometry is True,
         field positions and sizes will also be extracted.
+
+        Fields are sorted by page number and position (top-to-bottom,
+        left-to-right) for consistent output.
 
         Args:
             pdf_path: Path to the PDF file.
@@ -523,6 +551,9 @@ class PDFFormExtractor:
                 options=options,
             )
             pdf_fields.append(pdf_field)
+
+        # Sort fields by page and position for consistent output
+        pdf_fields = self._sort_fields(pdf_fields)
 
         # Build raw data structure for compatibility
         raw_data = self._build_raw_data_structure(pdf_fields, str(pdf_path))
