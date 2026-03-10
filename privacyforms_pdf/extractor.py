@@ -75,6 +75,91 @@ def _install_pypdf_warning_filter() -> None:
             logger.addFilter(_PypdfWarningFilter())
 
 
+def cluster_y_positions(
+    y_positions: list[float], default_threshold: float = 15.0
+) -> dict[float, float]:
+    """Cluster Y positions into rows using adaptive gap detection.
+
+    This function analyzes the distribution of Y coordinates and groups
+    positions that are likely part of the same visual row. It uses
+    statistical analysis of gaps between consecutive positions to
+    automatically determine an appropriate threshold.
+
+    The algorithm works by:
+    1. Sorting all Y positions
+    2. Calculating gaps between consecutive positions
+    3. Using percentile analysis to find natural row breaks
+    4. Clustering positions where gaps are smaller than the adaptive threshold
+
+    This approach adapts to different form layouts - tight forms with small
+    row spacing and loose forms with large row spacing are both handled well.
+
+    Args:
+        y_positions: List of Y coordinates from form fields.
+        default_threshold: Maximum within-row gap (default 15.0).
+
+    Returns:
+        Dictionary mapping each original Y position to its cluster center.
+    """
+    if not y_positions:
+        return {}
+
+    if len(y_positions) == 1:
+        return {y_positions[0]: y_positions[0]}
+
+    # Sort positions and remove duplicates
+    sorted_y = sorted(set(y_positions))
+
+    if len(sorted_y) == 1:
+        return {sorted_y[0]: sorted_y[0]}
+
+    # Calculate gaps between consecutive positions
+    gaps = [sorted_y[i + 1] - sorted_y[i] for i in range(len(sorted_y) - 1)]
+    sorted_gaps = sorted(gaps)
+
+    # Find the within-row threshold using gap analysis
+    # Strategy: find the largest gap that is likely "within-row" vs "between-row"
+    # We use the 25th percentile of gaps as the base threshold
+    # This separates tight clusters (within rows) from large gaps (between rows)
+    q1_idx = len(sorted_gaps) // 4  # 25th percentile
+
+    # Within-row variation: use 25th percentile as base
+    # This captures the typical "within row" variation
+    within_row_threshold = sorted_gaps[q1_idx] if q1_idx < len(sorted_gaps) else default_threshold
+
+    # Adaptive threshold: 75th percentile + small buffer, capped at reasonable max
+    # The buffer accounts for slight variations, but we cap it to prevent over-grouping
+    threshold = min(within_row_threshold * 1.5, default_threshold)
+
+    # Ensure threshold is reasonable (between 10 and default_threshold)
+    threshold = max(10.0, min(threshold, default_threshold))
+
+    # Cluster positions
+    clusters: list[list[float]] = []
+    current_cluster: list[float] = [sorted_y[0]]
+
+    for i in range(1, len(sorted_y)):
+        gap = sorted_y[i] - sorted_y[i - 1]
+        if gap <= threshold:
+            # Same cluster (row)
+            current_cluster.append(sorted_y[i])
+        else:
+            # New cluster (row)
+            clusters.append(current_cluster)
+            current_cluster = [sorted_y[i]]
+
+    clusters.append(current_cluster)
+
+    # Map each position to its cluster center (mean of cluster)
+    position_to_cluster: dict[float, float] = {}
+    for cluster in clusters:
+        center = sum(cluster) / len(cluster)
+        for pos in cluster:
+            position_to_cluster[pos] = center
+
+    return position_to_cluster
+
+
 class FieldGeometry(BaseModel):
     """Geometry information for a PDF form field.
 
@@ -474,7 +559,7 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
-    _POSITION_TOLERANCE = 15.0  # Points tolerance for considering positions identical
+    _DEFAULT_ROW_GAP_THRESHOLD = 15.0  # Default gap threshold for row detection
 
     def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
         """Sort fields by page number and position.
@@ -484,10 +569,9 @@ class PDFFormExtractor:
         2. Y position (descending - top to bottom in PDF coordinates)
         3. X position (ascending - left to right)
 
-        Fields with positions within +/- _POSITION_TOLERANCE (15 points)
-        are considered to be at the same position for sorting purposes.
-        This handles fields that are visually aligned but have slightly
-        different coordinates due to PDF generation variations.
+        Fields are grouped into rows using adaptive clustering based on the
+        distribution of Y coordinates. This handles forms with varying row
+        spacing better than a fixed tolerance.
 
         Args:
             fields: List of PDFField objects to sort.
@@ -495,19 +579,23 @@ class PDFFormExtractor:
         Returns:
             Sorted list of PDFField objects.
         """
-        tolerance = self._POSITION_TOLERANCE
+        # Collect all Y positions for clustering analysis
+        y_positions: list[float] = []
+        for field in fields:
+            if field.geometry:
+                y_positions.append(field.geometry.y)
+
+        # Build Y position clusters for row grouping
+        y_clusters = cluster_y_positions(y_positions, self._DEFAULT_ROW_GAP_THRESHOLD)
 
         def sort_key(field: PDFField) -> tuple[int, float, float]:
             page = field.pages[0] if field.pages else 1
             if field.geometry:
-                # Quantize coordinates to tolerance buckets so positions
-                # within +/- tolerance are treated as identical for sorting
-                # Use rounding to create consistent buckets
-                y_quantized = round(field.geometry.y / tolerance) * tolerance
-                x_quantized = round(field.geometry.x / tolerance) * tolerance
+                # Use clustered Y for row grouping, original X for ordering
+                y_clustered = y_clusters.get(field.geometry.y, field.geometry.y)
                 # Y is descending (higher Y = higher on page)
                 # X is ascending (left to right)
-                return (page, -y_quantized, x_quantized)
+                return (page, -y_clustered, field.geometry.x)
             return (page, 0.0, 0.0)
 
         return sorted(fields, key=sort_key)

@@ -9,7 +9,12 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from ..extractor import PDFField, PDFFormError, PDFFormNotFoundError
+from ..extractor import (
+    PDFField,
+    PDFFormError,
+    PDFFormNotFoundError,
+    cluster_y_positions,
+)
 from .utils import create_extractor
 
 
@@ -31,8 +36,8 @@ def _format_list_fields_value(field: PDFField) -> str:
 def _render_layout(fields: list[PDFField], pdf_name: str) -> None:
     """Render a visual layout representation of form fields.
 
-    Groups fields by page and row (normalized_y), showing the structure
-    of the form in a hierarchical console view.
+    Groups fields by page and row using adaptive clustering, showing the
+    structure of the form in a hierarchical console view.
 
     Args:
         fields: List of PDFField objects.
@@ -52,13 +57,19 @@ def _render_layout(fields: list[PDFField], pdf_name: str) -> None:
         page_fields = fields_by_page[page_num]
         console.print(f"[bold yellow]Page {page_num}[/bold yellow]")
 
-        # Group fields by normalized_y (row)
+        # Collect Y positions for this page and cluster them
+        y_positions: list[float] = [f.geometry.y for f in page_fields if f.geometry]
+        y_clusters = cluster_y_positions(y_positions)
+
+        # Group fields by clustered Y (row)
         rows: dict[float, list[PDFField]] = defaultdict(list)
         for field in page_fields:
-            norm_y = field.geometry.normalized_y if field.geometry else 0.0
-            rows[norm_y].append(field)
+            cluster_y = (
+                y_clusters.get(field.geometry.y, field.geometry.y) if field.geometry else 0.0
+            )
+            rows[cluster_y].append(field)
 
-        # Sort rows by normalized_y (descending - top to bottom)
+        # Sort rows by cluster Y (descending - top to bottom)
         sorted_rows = sorted(rows.items(), key=lambda x: -x[0])
 
         for row_idx, (norm_y, row_fields) in enumerate(sorted_rows, 1):
