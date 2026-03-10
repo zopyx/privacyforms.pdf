@@ -172,10 +172,13 @@ class FieldGeometry(BaseModel):
         height: Field height in points.
         units: Unit of measurement (always "pt" for points).
         normalized_y: Y position quantized to 15-point buckets for row grouping.
+        row_y: Y position of the row cluster (adaptive clustering for row grouping).
     """
 
     page: int
     rect: tuple[float, float, float, float]
+    # Store computed row_y after clustering analysis
+    _row_y: float | None = None
 
     # Tolerance for position normalization (15 PDF points)
     _POSITION_TOLERANCE: float = 15.0
@@ -210,11 +213,37 @@ class FieldGeometry(BaseModel):
         tolerance = self._POSITION_TOLERANCE
         return round(self.y / tolerance) * tolerance
 
+    @property
+    def row_y(self) -> float:
+        """Y position of the row cluster center.
+
+        This is computed using adaptive clustering analysis of all field
+        positions in the PDF. Fields with the same row_y are on the same
+        visual row.
+
+        Returns:
+            The cluster center Y coordinate, or the original Y if not clustered.
+        """
+        if self._row_y is not None:
+            return self._row_y
+        return self.y
+
+    def set_row_y(self, value: float) -> None:
+        """Set the computed row cluster Y position.
+
+        This is called after clustering analysis is performed on all fields.
+
+        Args:
+            value: The cluster center Y coordinate.
+        """
+        self._row_y = value
+
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG002
         """Convert to dictionary for JSON serialization.
 
         Returns:
-            Dictionary with page, rect, x, y, width, height, normalized_y, units.
+            Dictionary with page, rect, x, y, width, height, normalized_y,
+            row_y, and units.
         """
         return {
             "page": self.page,
@@ -224,6 +253,7 @@ class FieldGeometry(BaseModel):
             "width": self.width,
             "height": self.height,
             "normalized_y": self.normalized_y,
+            "row_y": self.row_y,
             "units": "pt",
         }
 
@@ -561,6 +591,33 @@ class PDFFormExtractor:
 
     _DEFAULT_ROW_GAP_THRESHOLD = 15.0  # Default gap threshold for row detection
 
+    def _compute_and_set_row_clusters(self, fields: list[PDFField]) -> None:
+        """Compute row clusters and set row_y on each field's geometry.
+
+        This method analyzes all field Y positions using adaptive clustering
+        and sets the computed row cluster center on each geometry object.
+
+        Args:
+            fields: List of PDFField objects to process.
+        """
+        # Collect all Y positions for clustering analysis
+        y_positions: list[float] = []
+        for field in fields:
+            if field.geometry:
+                y_positions.append(field.geometry.y)
+
+        if not y_positions:
+            return
+
+        # Build Y position clusters for row grouping
+        y_clusters = cluster_y_positions(y_positions, self._DEFAULT_ROW_GAP_THRESHOLD)
+
+        # Set row_y on each geometry
+        for field in fields:
+            if field.geometry:
+                cluster_y = y_clusters.get(field.geometry.y, field.geometry.y)
+                field.geometry.set_row_y(cluster_y)
+
     def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
         """Sort fields by page number and position.
 
@@ -569,9 +626,9 @@ class PDFFormExtractor:
         2. Y position (descending - top to bottom in PDF coordinates)
         3. X position (ascending - left to right)
 
-        Fields are grouped into rows using adaptive clustering based on the
-        distribution of Y coordinates. This handles forms with varying row
-        spacing better than a fixed tolerance.
+        Fields are grouped into rows using pre-computed row_y values from
+        adaptive clustering. This handles forms with varying row spacing
+        better than a fixed tolerance.
 
         Args:
             fields: List of PDFField objects to sort.
@@ -579,23 +636,14 @@ class PDFFormExtractor:
         Returns:
             Sorted list of PDFField objects.
         """
-        # Collect all Y positions for clustering analysis
-        y_positions: list[float] = []
-        for field in fields:
-            if field.geometry:
-                y_positions.append(field.geometry.y)
-
-        # Build Y position clusters for row grouping
-        y_clusters = cluster_y_positions(y_positions, self._DEFAULT_ROW_GAP_THRESHOLD)
 
         def sort_key(field: PDFField) -> tuple[int, float, float]:
             page = field.pages[0] if field.pages else 1
             if field.geometry:
-                # Use clustered Y for row grouping, original X for ordering
-                y_clustered = y_clusters.get(field.geometry.y, field.geometry.y)
+                # Use pre-computed row_y for row grouping, original X for ordering
                 # Y is descending (higher Y = higher on page)
                 # X is ascending (left to right)
-                return (page, -y_clustered, field.geometry.x)
+                return (page, -field.geometry.row_y, field.geometry.x)
             return (page, 0.0, 0.0)
 
         return sorted(fields, key=sort_key)
@@ -667,6 +715,9 @@ class PDFFormExtractor:
                 options=options,
             )
             pdf_fields.append(pdf_field)
+
+        # Compute row clustering and set row_y on each geometry
+        self._compute_and_set_row_clusters(pdf_fields)
 
         # Sort fields by page and position for consistent output
         pdf_fields = self._sort_fields(pdf_fields)
