@@ -21,7 +21,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "writing test.pdf ..."
             mock_run.return_value.stderr = ""
@@ -41,7 +41,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "writing test.pdf ..."
             mock_run.return_value.stderr = ""
@@ -57,7 +57,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "writing test.pdf ..."
             mock_run.return_value.stderr = ""
@@ -73,7 +73,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -89,7 +89,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -122,7 +122,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "please provide the owner password"
@@ -135,7 +135,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "PDF not encrypted"
@@ -149,7 +149,10 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run", side_effect=FileNotFoundError("pdfcpu not found")):
+        with patch(
+            "privacyforms_pdf.security.subprocess.run",
+            side_effect=FileNotFoundError("pdfcpu not found"),
+        ):
             result = runner.invoke(main, ["set-permissions", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
             assert "pdfcpu not found" in result.output.lower()
@@ -159,7 +162,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -183,7 +186,13 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch(
+                "privacyforms_pdf.security.shutil.which",
+                return_value="/custom/pdfcpu",
+            ),
+            patch("privacyforms_pdf.security.subprocess.run") as mock_run,
+        ):
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -207,7 +216,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "dict=formFieldDict required entry=DA missing"
@@ -245,7 +254,7 @@ class TestSetPermissionsCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -343,7 +352,7 @@ class TestBuildPermissionBits:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -358,7 +367,7 @@ class TestBuildPermissionBits:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -393,7 +402,7 @@ class TestBuildPermissionBits:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -408,7 +417,7 @@ class TestBuildPermissionBits:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""

@@ -648,6 +648,35 @@ class TestValidateFormData:
             errors = extractor.validate_form_data(test_file, form_data, allow_extra_fields=True)
             assert errors == []
 
+    def test_validate_checkbox_type_error_with_allow_extra_fields(self, tmp_path: Path) -> None:
+        """Test checkbox type validation is not bypassed when allow_extra_fields=True."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_field = PDFField(
+            name="Agree",
+            id="1",
+            type="checkbox",
+            value=False,
+            pages=[1],
+            locked=False,
+        )
+        mock_form_data = PDFFormData(
+            source=test_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[mock_field],
+            raw_data={},
+        )
+
+        form_data = {"Agree": "yes"}  # String instead of bool
+
+        with patch.object(extractor, "extract", return_value=mock_form_data):
+            errors = extractor.validate_form_data(test_file, form_data, allow_extra_fields=True)
+            assert len(errors) == 1
+            assert "boolean" in errors[0].lower()
+
 
 class TestFillForm:
     """Tests for fill_form method."""
@@ -1515,13 +1544,13 @@ class TestGetFieldTypeEdgeCases:
         """Test date field detection with /AA."""
         field = {"/FT": "/Tx", "/AA": {}}
         result = PDFFormExtractor._get_field_type(field)
-        assert result == "textfield"
+        assert result == "datefield"
 
     def test_date_field_with_dv(self) -> None:
         """Test date field detection with /DV."""
         field = {"/FT": "/Tx", "/DV": "default"}
         result = PDFFormExtractor._get_field_type(field)
-        assert result == "textfield"
+        assert result == "datefield"
 
     def test_default_fallback_textfield(self) -> None:
         """Test default fallback returns textfield for unknown types."""
@@ -1703,7 +1732,7 @@ class TestGetFieldPagesEdgeCases:
         extractor = PDFFormExtractor()
 
         mock_annot_ref = MagicMock()
-        mock_annot_ref.get_object.side_effect = Exception("Error reading annotation")
+        mock_annot_ref.get_object.side_effect = AttributeError("Error reading annotation")
 
         class MockPage(dict):
             def __init__(self):
@@ -1785,7 +1814,7 @@ class TestExtractGeometryEdgeCases:
         extractor = PDFFormExtractor()
 
         mock_annot_ref = MagicMock()
-        mock_annot_ref.get_object.side_effect = Exception("Error reading annotation")
+        mock_annot_ref.get_object.side_effect = AttributeError("Error reading annotation")
 
         class MockPage(dict):
             def __init__(self):
@@ -2378,7 +2407,7 @@ class TestExtractorCoverageHelpers:
             "/Rect": [10, 20, 30, 40],
         }
         bad_ref = MagicMock()
-        bad_ref.get_object.side_effect = Exception("broken")
+        bad_ref.get_object.side_effect = AttributeError("broken")
         ref1 = MagicMock()
         ref1.get_object.return_value = annot1
         ref2 = MagicMock()

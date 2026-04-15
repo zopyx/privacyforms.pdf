@@ -31,7 +31,7 @@ Bit 10: false (extract(rev>=3))
 Bit 11: false (modify(rev>=3))
 Bit 12: false (print high-level(rev>=3))"""
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = mock_output
             mock_run.return_value.stderr = ""
@@ -47,7 +47,7 @@ Bit 12: false (print high-level(rev>=3))"""
 
         mock_output = "permission bits: 000000000000 (x000)\nBit 3: false"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = mock_output
             mock_run.return_value.stderr = ""
@@ -62,7 +62,7 @@ Bit 12: false (print high-level(rev>=3))"""
 
         mock_output = "permission bits: 000000000000 (x000)\nBit 3: false"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = mock_output
             mock_run.return_value.stderr = ""
@@ -74,7 +74,7 @@ Bit 12: false (print high-level(rev>=3))"""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "Please provide the correct password"
@@ -87,7 +87,10 @@ Bit 12: false (print high-level(rev>=3))"""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run", side_effect=FileNotFoundError("pdfcpu not found")):
+        with patch(
+            "privacyforms_pdf.security.subprocess.run",
+            side_effect=FileNotFoundError("pdfcpu not found"),
+        ):
             result = runner.invoke(main, ["list-permissions", str(pdf_file)])
             assert result.exit_code != 0
             assert "pdfcpu not found" in result.output.lower()
@@ -97,7 +100,7 @@ Bit 12: false (print high-level(rev>=3))"""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = ""
@@ -112,7 +115,7 @@ Bit 12: false (print high-level(rev>=3))"""
 
         mock_output = "permission bits: 111111111111 (xFFF)\nBit 3: true"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = mock_output
             mock_run.return_value.stderr = ""
@@ -126,7 +129,13 @@ Bit 12: false (print high-level(rev>=3))"""
 
         mock_output = "permission bits: 000000000000 (x000)\nBit 3: false"
 
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch(
+                "privacyforms_pdf.security.shutil.which",
+                return_value="/custom/pdfcpu",
+            ),
+            patch("privacyforms_pdf.security.subprocess.run") as mock_run,
+        ):
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = mock_output
             mock_run.return_value.stderr = ""
@@ -162,7 +171,7 @@ Bit 12: false (print high-level(rev>=3))"""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "dict=formFieldDict required entry=DA missing"
