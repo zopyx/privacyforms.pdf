@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pypdf.generic import (
+    ArrayObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    StreamObject,
+    TextStringObject,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path as PathType
@@ -22,6 +31,8 @@ from privacyforms_pdf.extractor import (
     PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
+    _install_pypdf_warning_filter,
+    _PypdfWarningFilter,
     get_available_geometry_backends,
     has_geometry_support,
 )
@@ -729,6 +740,194 @@ class TestFillForm:
         ):
             extractor.fill_form(test_file, {"Name": "John"}, validate=False)
 
+    def test_fill_form_falls_back_on_pypdf_appearance_error(self, tmp_path: Path) -> None:
+        """Test fill_form fallback is used for pypdf appearance-stream bug."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx", "/V": ""}}
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [MagicMock()]
+        mock_writer.update_page_form_field_values.side_effect = AttributeError(
+            "'int' object has no attribute 'encode'"
+        )
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+            patch.object(extractor, "_fill_form_fields_without_appearance") as fallback,
+        ):
+            result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
+            assert result == output_file
+            fallback.assert_called_once_with(mock_writer, {"Name": "John"})
+
+    def test_fill_form_without_appearance_updates_widget_values(self) -> None:
+        """Test fallback fill updates text and checkbox widget values."""
+        extractor = PDFFormExtractor()
+
+        text_annotation = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Name"}
+        button_annotation = {"/Subtype": "/Widget", "/FT": "/Btn", "/T": "Agree"}
+
+        text_ref = MagicMock()
+        text_ref.get_object.return_value = text_annotation
+        button_ref = MagicMock()
+        button_ref.get_object.return_value = button_annotation
+
+        page = {"/Annots": [text_ref, button_ref]}
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+
+        extractor._fill_form_fields_without_appearance(
+            mock_writer,
+            {"Name": "John", "Agree": "/Yes"},
+        )
+
+        mock_writer.set_need_appearances_writer.assert_called_once_with(True)
+        assert str(text_annotation["/V"]) == "John"
+        assert str(button_annotation["/V"]) == "/Yes"
+        assert str(button_annotation["/AS"]) == "/Yes"
+
+    def test_fill_form_syncs_radio_button_appearance_states(self, tmp_path: Path) -> None:
+        """Test fill_form sets radio widget appearances from option labels."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        writer_parent: dict[str, object] = {
+            "/FT": "/Btn",
+            "/T": "Gender",
+            "/Opt": ["Male", "Female"],
+        }
+        writer_parent_ref = MagicMock()
+        writer_parent_ref.get_object.return_value = writer_parent
+
+        writer_radio_0 = {
+            "/Subtype": "/Widget",
+            "/Parent": writer_parent_ref,
+            "/AP": {"/N": {"/0": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+        writer_radio_1 = {
+            "/Subtype": "/Widget",
+            "/Parent": writer_parent_ref,
+            "/AP": {"/N": {"/1": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+
+        writer_radio_0_ref = MagicMock()
+        writer_radio_0_ref.get_object.return_value = writer_radio_0
+        writer_radio_1_ref = MagicMock()
+        writer_radio_1_ref.get_object.return_value = writer_radio_1
+        writer_parent["/Kids"] = [writer_radio_0_ref, writer_radio_1_ref]
+
+        page = {"/Annots": [writer_radio_0_ref, writer_radio_1_ref]}
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {
+            "Gender": {
+                "/FT": "/Btn",
+                "/T": "Gender",
+                "/Opt": ["Male", "Female"],
+            }
+        }
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+        mock_writer._add_object.side_effect = lambda obj: obj
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            extractor.fill_form(
+                test_file,
+                {"Gender": "Male"},
+                output_file,
+                validate=False,
+            )
+
+        assert str(writer_parent["/V"]) == "/0"
+        assert str(writer_radio_0["/AS"]) == "/0"
+        assert str(writer_radio_0["/V"]) == "/0"
+        assert str(writer_radio_1["/AS"]) == "/Off"
+        assert str(writer_radio_1["/V"]) == "/Off"
+
+    def test_fill_form_sets_listbox_selection_index(self, tmp_path: Path) -> None:
+        """Test fill_form sets the listbox value and selected option index."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        listbox_annotation = DictionaryObject(
+            {
+                NameObject("/Subtype"): NameObject("/Widget"),
+                NameObject("/FT"): NameObject("/Ch"),
+                NameObject("/T"): TextStringObject("Language"),
+                NameObject("/Ff"): NumberObject(0),
+                NameObject("/Opt"): ArrayObject(
+                    [
+                        TextStringObject("English"),
+                        TextStringObject("German"),
+                        TextStringObject("French"),
+                    ]
+                ),
+            }
+        )
+        listbox_ref = MagicMock()
+        listbox_ref.get_object.return_value = listbox_annotation
+
+        page = {"/Annots": [listbox_ref]}
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {
+            "Language": {
+                "/FT": "/Ch",
+                "/T": "Language",
+                "/Ff": 0,
+                "/Opt": ["English", "German", "French"],
+            }
+        }
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [page]
+        mock_writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get(
+            "/T", ""
+        )
+        mock_writer._add_object.side_effect = lambda obj: obj
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            extractor.fill_form(
+                test_file,
+                {"Language": "German"},
+                output_file,
+                validate=False,
+            )
+
+        assert str(listbox_annotation["/V"]) == "German"
+        assert list(cast("ArrayObject", listbox_annotation["/I"])) == [1]
+        assert int(cast("NumberObject", listbox_annotation["/TI"])) == 1
+        appearance = cast("DictionaryObject", listbox_annotation["/AP"])
+        appearance_stream = (
+            cast("StreamObject", appearance["/N"].get_object()).get_data().decode("latin1")
+        )
+        assert "0.600006 0.756866 0.854904 rg" in appearance_stream
+        assert "(German) Tj" in appearance_stream
+
 
 class TestFillFormFromJson:
     """Tests for fill_form_from_json method."""
@@ -1039,6 +1238,268 @@ class TestBackwardsCompatibility:
         from privacyforms_pdf.extractor import PDFCPUNotFoundError
 
         assert PDFCPUNotFoundError is PDFFormError
+
+
+class TestIsPdfcpuAvailable:
+    """Tests for is_pdfcpu_available function."""
+
+    def test_is_pdfcpu_available_returns_bool(self) -> None:
+        """Test is_pdfcpu_available returns a boolean."""
+        from privacyforms_pdf.extractor import is_pdfcpu_available
+
+        result = is_pdfcpu_available()
+        assert isinstance(result, bool)
+
+    def test_is_pdfcpu_available_with_custom_path(self) -> None:
+        """Test is_pdfcpu_available with custom path."""
+        from privacyforms_pdf.extractor import is_pdfcpu_available
+
+        # Test with a path that definitely doesn't exist
+        result = is_pdfcpu_available("/nonexistent/pdfcpu/binary")
+        assert result is False
+
+
+class TestFillFormWithPdfcpu:
+    """Tests for fill_form_with_pdfcpu method."""
+
+    def test_fill_form_with_pdfcpu_pdfcpu_not_found(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when pdfcpu not found."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {}}
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value=None),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(
+                    test_file, {"Name": "John"}, pdfcpu_path="/nonexistent/pdfcpu"
+                )
+            assert "pdfcpu binary not found" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_no_form(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when PDF has no form."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = None
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            pytest.raises(PDFFormNotFoundError),
+        ):
+            extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"})
+
+    def test_fill_form_with_pdfcpu_validation_fails(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises error when validation fails."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=["bad field"]),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            pytest.raises(FormValidationError),
+        ):
+            # Unknown field should trigger validation error
+            extractor.fill_form_with_pdfcpu(test_file, {"UnknownField": "value"}, validate=True)
+
+    def test_fill_form_with_pdfcpu_success(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu succeeds."""
+        import json
+
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+        filled_json: dict[str, Any] = {}
+
+        def mock_run(cmd: list[str], *_args: Any, **_kwargs: Any) -> MagicMock:
+            """Simulate pdfcpu export/fill and capture the filled payload."""
+            if cmd[2] == "export":
+                export_path = Path(cmd[4])
+                export_path.write_text(
+                    json.dumps(
+                        {
+                            "header": {"source": str(test_file), "version": "pdfcpu v0.11.1"},
+                            "forms": [
+                                {
+                                    "textfield": [
+                                        {
+                                            "id": "76.14",
+                                            "name": "Form1.Name",
+                                            "value": "",
+                                            "locked": False,
+                                            "multiline": False,
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            else:
+                json_path = Path(cmd[4])
+                filled_json.update(json.loads(json_path.read_text(encoding="utf-8")))
+                Path(cmd[5]).touch()
+            return MagicMock(returncode=0)
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run", side_effect=mock_run
+            ) as mock_subprocess,
+        ):
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+            assert result == output_file
+            assert mock_subprocess.call_count == 2
+            assert filled_json["forms"][0]["textfield"][0]["value"] == "John"
+            assert filled_json["forms"][0]["textfield"][0]["name"] == "Form1.Name"
+            assert filled_json["forms"][0]["textfield"][0]["multiline"] is False
+
+    def test_fill_form_with_pdfcpu_subprocess_error(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu handles subprocess error."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, ["pdfcpu"], stderr="error"),
+            ),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, validate=False)
+            assert "pdfcpu failed" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_falls_back_to_pypdf_on_missing_da(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu falls back when pdfcpu rejects missing /DA."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(
+                extractor,
+                "_export_pdfcpu_form_data",
+                side_effect=PDFFormError(
+                    "pdfcpu failed with exit code 1: dict=formFieldDict required entry=DA missing"
+                ),
+            ),
+            patch.object(extractor, "fill_form", return_value=output_file) as mock_fill_form,
+        ):
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+
+        assert result == output_file
+        mock_fill_form.assert_called_once_with(
+            test_file, {"Name": "John"}, output_file, validate=False
+        )
+        assert extractor.last_fill_backend == "pypdf-fallback"
+        assert extractor.last_fill_backend_reason is not None
+
+    def test_fill_form_with_pdfcpu_timeout(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu handles timeout."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["pdfcpu"], 30),
+            ),
+        ):
+            with pytest.raises(PDFFormError) as exc_info:
+                extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, validate=False)
+            assert "timed out" in str(exc_info.value)
+
+    def test_fill_form_with_pdfcpu_checkbox_conversion(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu converts boolean values correctly."""
+        import json
+
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        # Will capture JSON content inside the mock callback
+        # because temp files are deleted after subprocess.run
+        written_json: dict[str, Any] = {}
+
+        def capture_and_read_json(*args: Any, **kwargs: Any) -> MagicMock:
+            """Capture export/fill JSON files before cleanup."""
+            nonlocal written_json
+            cmd = args[0] if args else kwargs.get("args")
+            if cmd and cmd[2] == "export":
+                export_path = Path(cmd[4])
+                export_path.write_text(
+                    json.dumps(
+                        {
+                            "header": {"source": str(test_file), "version": "pdfcpu v0.11.1"},
+                            "forms": [
+                                {
+                                    "checkbox": [
+                                        {
+                                            "id": "76.45",
+                                            "name": "Form1.Agree",
+                                            "default": False,
+                                            "value": False,
+                                            "locked": False,
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            elif cmd and len(cmd) >= 6:
+                json_path = Path(cmd[4])
+                with open(json_path, encoding="utf-8") as f:
+                    written_json = json.load(f)
+                Path(cmd[5]).touch()
+            return MagicMock(returncode=0)
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch("privacyforms_pdf.extractor.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = capture_and_read_json
+            extractor.fill_form_with_pdfcpu(test_file, {"Agree": True}, output_file, validate=False)
+
+            # Check that pdfcpu export and fill were both invoked
+            assert mock_run.call_count == 2
+
+            # Check that the checkbox value is a boolean True (not a string)
+            assert "forms" in written_json
+            assert len(written_json["forms"]) > 0
+            checkbox_fields = written_json["forms"][0].get("checkbox", [])
+            assert len(checkbox_fields) == 1
+            assert checkbox_fields[0]["value"] is True
+            assert isinstance(checkbox_fields[0]["value"], bool)
 
 
 class TestGetFieldTypeEdgeCases:
@@ -1870,3 +2331,415 @@ class TestExtractGeometryDisabled:
             assert isinstance(result, PDFFormData)
             # Field should have no geometry
             assert result.fields[0].geometry is None
+
+
+class TestExtractorCoverageHelpers:
+    """Focused tests for uncovered extractor helper branches."""
+
+    def test_warning_filter_blocks_annotation_size_message(self) -> None:
+        """Test warning filter rejects the known noisy pypdf warning."""
+        record = MagicMock()
+        record.getMessage.return_value = "Annotation sizes differ: old vs new"
+        assert _PypdfWarningFilter().filter(record) is False
+
+    def test_install_warning_filter_is_idempotent(self) -> None:
+        """Test installing pypdf warning filters more than once does not duplicate them."""
+        import logging
+
+        logger = logging.getLogger("pypdf")
+        original_filters = list(logger.filters)
+        try:
+            logger.filters = []
+            _install_pypdf_warning_filter()
+            count_after_first = sum(isinstance(f, _PypdfWarningFilter) for f in logger.filters)
+            _install_pypdf_warning_filter()
+            count_after_second = sum(isinstance(f, _PypdfWarningFilter) for f in logger.filters)
+            assert count_after_first == 1
+            assert count_after_second == 1
+        finally:
+            logger.filters = original_filters
+
+    def test_get_field_options_from_nested_lists(self) -> None:
+        """Test extracting options from nested /Opt list variants."""
+        field = {"/Opt": [["export1", "Label 1"], ["Only One"]]}
+        assert PDFFormExtractor._get_field_options(field) == ["Label 1", "Only One"]
+
+    def test_extract_widgets_info_updates_pages_and_geometry(self) -> None:
+        """Test widget scan appends pages and fills missing geometry from a later widget."""
+        extractor = PDFFormExtractor()
+
+        annot1 = {
+            "/Subtype": "/Widget",
+            "/T": "Field1",
+        }
+        annot2 = {
+            "/Subtype": "/Widget",
+            "/T": "Field1",
+            "/Rect": [10, 20, 30, 40],
+        }
+        bad_ref = MagicMock()
+        bad_ref.get_object.side_effect = Exception("broken")
+        ref1 = MagicMock()
+        ref1.get_object.return_value = annot1
+        ref2 = MagicMock()
+        ref2.get_object.return_value = annot2
+        page1 = {"/Annots": [bad_ref, ref1]}
+        page2 = {"/Annots": [ref2]}
+
+        reader = MagicMock()
+        reader.pages = [page1, page2]
+
+        info = extractor._extract_widgets_info(reader)
+        pages, geometry = info["Field1"]
+        assert pages == [1, 2]
+        assert geometry is not None
+        assert geometry.rect == (10.0, 20.0, 30.0, 40.0)
+
+    def test_lookup_methods_match_nonfirst_field(self, tmp_path: Path) -> None:
+        """Test lookup helpers iterate past the first non-matching field."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        fields = [
+            PDFField(name="First", id="1", type="textfield", value="A"),
+            PDFField(name="Second", id="2", type="textfield", value="B"),
+        ]
+        form_data = PDFFormData(test_file, "1.4", True, fields, {})
+
+        with patch.object(extractor, "extract", return_value=form_data):
+            assert extractor.get_field_value(test_file, "Second") == "B"
+            assert extractor.get_field_by_id(test_file, "2") is fields[1]
+            assert extractor.get_field_by_name(test_file, "Second") is fields[1]
+
+    def test_fill_form_with_validation_success(self, tmp_path: Path) -> None:
+        """Test fill_form continues when validation passes."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        output_file = tmp_path / "output.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        mock_writer = MagicMock()
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=[]),
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=True)
+            assert result == output_file
+
+    def test_fill_form_reraises_unexpected_attribute_error(self, tmp_path: Path) -> None:
+        """Test fill_form re-raises unrelated AttributeError from pypdf."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        output_file = tmp_path / "output.pdf"
+        test_file.touch()
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        mock_writer = MagicMock()
+        mock_writer.pages = [MagicMock()]
+        mock_writer.update_page_form_field_values.side_effect = AttributeError("different bug")
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+            pytest.raises(AttributeError, match="different bug"),
+        ):
+            extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
+
+    def test_fill_form_without_appearance_skips_non_widgets_and_unmatched(self) -> None:
+        """Test fallback fill ignores unsupported annotations cleanly."""
+        extractor = PDFFormExtractor()
+
+        non_widget = {"/Subtype": "/Link", "/T": "Ignore"}
+        unmatched = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Other"}
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = non_widget
+        unmatched_ref = MagicMock()
+        unmatched_ref.get_object.return_value = unmatched
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [widget_ref, unmatched_ref]}, {"/Annots": []}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._fill_form_fields_without_appearance(writer, {"Name": "John"})
+
+        writer.set_need_appearances_writer.assert_called_once_with(True)
+        assert "/V" not in unmatched
+
+    def test_get_field_by_name_from_writer_returns_none_for_no_match(self) -> None:
+        """Test writer field lookup returns None when no widget matches the name."""
+        extractor = PDFFormExtractor()
+        annot = {"/Subtype": "/Widget", "/T": "Other"}
+        ref = MagicMock()
+        ref.get_object.return_value = annot
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        assert extractor.get_field_by_name_from_writer(writer, "Missing") is None
+
+    def test_get_widget_on_state_handles_missing_ap_variants(self) -> None:
+        """Test widget on-state helper handles missing appearance data."""
+        assert PDFFormExtractor._get_widget_on_state({}) is None
+        assert PDFFormExtractor._get_widget_on_state({"/AP": {}}) is None
+        assert (
+            PDFFormExtractor._get_widget_on_state({"/AP": {"/N": {"/Off": None, "/Yes": None}}})
+            == "/Yes"
+        )
+
+    def test_resolve_radio_field_state_variants(self) -> None:
+        """Test radio state resolution for direct, option-mapped, and fallback cases."""
+        kids = [
+            {"/AP": {"/N": {"/0": None, "/Off": None}}},
+            {"/AP": {"/N": {"/1": None, "/Off": None}}},
+        ]
+        parent = {"/Kids": kids, "/Opt": ["Male", "Female"]}
+
+        assert PDFFormExtractor._resolve_radio_field_state(parent, "/0") == "/0"
+        assert PDFFormExtractor._resolve_radio_field_state(parent, "Female") == "/1"
+        assert (
+            PDFFormExtractor._resolve_radio_field_state(
+                {"/Kids": [{"/AP": {"/N": {"/X": None}}}]},
+                "missing",
+            )
+            == "/Off"
+        )
+
+    def test_sync_radio_button_states_ignores_irrelevant_annotations(self) -> None:
+        """Test radio sync skips non-radio widgets and unmatched field names."""
+        extractor = PDFFormExtractor()
+        text = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Text"}
+        radio = {
+            "/Subtype": "/Widget",
+            "/Parent": MagicMock(),
+            "/AP": {"/N": {"/0": None, "/Off": None}},
+            "/AS": "/Off",
+        }
+        radio_parent = {"/FT": "/Btn", "/T": "Gender", "/Opt": ["Male"], "/Kids": []}
+        radio["/Parent"].get_object.return_value = radio_parent
+        radio_ref = MagicMock()
+        radio_ref.get_object.return_value = radio
+        text_ref = MagicMock()
+        text_ref.get_object.return_value = text
+        radio_parent["/Kids"] = [radio_ref]
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [text_ref, radio_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._sync_radio_button_states(writer, {"Other": "Male"})
+        assert radio["/AS"] == "/Off"
+
+    def test_resolve_listbox_index_missing_value(self) -> None:
+        """Test listbox index resolution returns None for unknown values."""
+        assert PDFFormExtractor._resolve_listbox_index({"/Opt": ["A", "B"]}, "C") is None
+
+    def test_sync_listbox_selection_indexes_skips_nonmatching_annotations(self) -> None:
+        """Test listbox sync skips irrelevant annotations and empty pages."""
+        extractor = PDFFormExtractor()
+        non_widget = {"/Subtype": "/Link", "/T": "Language"}
+        wrong_type = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Language"}
+        ref1 = MagicMock()
+        ref1.get_object.return_value = non_widget
+        ref2 = MagicMock()
+        ref2.get_object.return_value = wrong_type
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref1, ref2]}, {"/Annots": []}]
+        writer._get_qualified_field_name.side_effect = lambda annotation: annotation.get("/T", "")
+
+        extractor._sync_listbox_selection_indexes(writer, {"Language": "German"})
+        assert "/I" not in wrong_type
+
+    def test_sync_listbox_selection_indexes_handles_missing_options_and_ap(self) -> None:
+        """Test listbox sync handles unknown values and missing appearance data."""
+        extractor = PDFFormExtractor()
+        annotation = {"/Subtype": "/Widget", "/FT": "/Ch", "/T": "Language", "/Opt": ["A", "B"]}
+        ref = MagicMock()
+        ref.get_object.return_value = annotation
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [ref]}]
+        writer._get_qualified_field_name.side_effect = lambda annotation_obj: annotation_obj.get(
+            "/T", ""
+        )
+        writer._add_object.side_effect = lambda obj: obj
+
+        extractor._sync_listbox_selection_indexes(writer, {"Language": "Missing"})
+        assert str(annotation["/V"]) == "Missing"
+        assert "/I" not in annotation
+        assert "/AP" in annotation
+
+    def test_build_listbox_appearance_stream_variants(self) -> None:
+        """Test listbox appearance builder handles missing and existing resource metadata."""
+        extractor = PDFFormExtractor()
+        writer = MagicMock()
+        writer._add_object.side_effect = lambda obj: obj
+
+        assert extractor._build_listbox_appearance_stream(writer, {}, {}, 0) is None
+
+        annotation = {
+            "/AP": {
+                "/N": type(
+                    "Ref",
+                    (),
+                    {
+                        "get_object": lambda self: {
+                            "/Resources": DictionaryObject(
+                                {
+                                    NameObject("/Font"): DictionaryObject(
+                                        {NameObject("/F1"): DictionaryObject()}
+                                    )
+                                }
+                            ),
+                            "/BBox": ArrayObject(
+                                [
+                                    NumberObject(0),
+                                    NumberObject(0),
+                                    NumberObject(120),
+                                    NumberObject(40),
+                                ]
+                            ),
+                        }
+                    },
+                )()
+            }
+        }
+        parent = {"/Opt": ["One", "Two"]}
+        stream = extractor._build_listbox_appearance_stream(writer, annotation, parent, None)
+        assert stream is not None
+        data = cast("StreamObject", stream).get_data().decode("latin1")
+        assert "/F1" in data
+        assert "0.600006 0.756866 0.854904 rg" not in data
+
+
+class TestClusterYPositions:
+    """Tests for the cluster_y_positions function."""
+
+    def test_empty_list(self) -> None:
+        """Test cluster_y_positions with empty list."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([])
+        assert result == {}
+
+    def test_single_position(self) -> None:
+        """Test cluster_y_positions with single position."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0])
+        assert result == {100.0: 100.0}
+
+    def test_duplicate_positions(self) -> None:
+        """Test cluster_y_positions with duplicate positions."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 100.0, 100.0])
+        assert result == {100.0: 100.0}
+
+    def test_two_close_positions(self) -> None:
+        """Test cluster_y_positions with two close positions (same cluster)."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 105.0])
+        # With default threshold of 15, these should be clustered together
+        assert result[100.0] == result[105.0]
+
+    def test_two_far_positions(self) -> None:
+        """Test cluster_y_positions with two far positions (different clusters)."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        result = cluster_y_positions([100.0, 200.0])
+        # These should be in different clusters
+        assert result[100.0] != result[200.0]
+
+    def test_multiple_clusters(self) -> None:
+        """Test cluster_y_positions with multiple distinct clusters."""
+        from privacyforms_pdf.extractor import cluster_y_positions
+
+        # Three rows: 100-105, 200-210, 300
+        positions = [100.0, 105.0, 200.0, 210.0, 300.0]
+        result = cluster_y_positions(positions)
+        # First cluster
+        assert result[100.0] == result[105.0]
+        # Second cluster
+        assert result[200.0] == result[210.0]
+        # All clusters are different
+        assert result[100.0] != result[200.0]
+        assert result[200.0] != result[300.0]
+
+
+class TestRowYProperty:
+    """Tests for the row_y property on FieldGeometry."""
+
+    def test_row_y_defaults_to_y(self) -> None:
+        """Test row_y returns y when not explicitly set."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        assert geometry.row_y == 100.0
+
+    def test_row_y_returns_set_value(self) -> None:
+        """Test row_y returns the value set via set_row_y."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry.set_row_y(150.0)
+        assert geometry.row_y == 150.0
+
+    def test_row_y_in_model_dump(self) -> None:
+        """Test row_y is included in model_dump output."""
+        geometry = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry.set_row_y(150.0)
+        data = geometry.model_dump()
+        assert "row_y" in data
+        assert data["row_y"] == 150.0
+
+
+class TestComputeAndSetRowClusters:
+    """Tests for _compute_and_set_row_clusters method."""
+
+    def test_compute_row_clusters(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters sets row_y on geometries."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        # Create mock fields with geometries
+        geometry1 = FieldGeometry(page=1, rect=(10.0, 100.0, 50.0, 130.0))
+        geometry2 = FieldGeometry(page=1, rect=(60.0, 105.0, 100.0, 135.0))
+        geometry3 = FieldGeometry(page=1, rect=(10.0, 200.0, 50.0, 230.0))
+
+        fields = [
+            PDFField(name="Field1", id="1", type="textfield", geometry=geometry1, pages=[1]),
+            PDFField(name="Field2", id="2", type="textfield", geometry=geometry2, pages=[1]),
+            PDFField(name="Field3", id="3", type="textfield", geometry=geometry3, pages=[1]),
+        ]
+
+        extractor._compute_and_set_row_clusters(fields)
+
+        # Field1 and Field2 should have same row_y (clustered)
+        assert geometry1.row_y == geometry2.row_y
+        # Field3 should have different row_y
+        assert geometry1.row_y != geometry3.row_y
+
+    def test_compute_row_clusters_no_geometry(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters handles fields without geometry."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        fields = [
+            PDFField(name="Field1", id="1", type="textfield", geometry=None, pages=[1]),
+        ]
+
+        # Should not raise an error
+        extractor._compute_and_set_row_clusters(fields)
+
+    def test_compute_row_clusters_empty(self, tmp_path: Path) -> None:
+        """Test _compute_and_set_row_clusters with empty field list."""
+        from privacyforms_pdf.extractor import PDFFormExtractor
+
+        extractor = PDFFormExtractor()
+
+        # Should not raise an error
+        extractor._compute_and_set_row_clusters([])

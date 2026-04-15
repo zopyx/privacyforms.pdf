@@ -21,9 +21,10 @@ privacyforms_pdf/
 ### Core Classes
 
 - **PDFFormExtractor**: Main class for extracting and filling PDF forms
-  - Uses pypdf for all PDF operations
+  - Uses pypdf for all PDF operations by default
+  - Can optionally use pdfcpu for form filling via `fill_form_with_pdfcpu()`
   - Handles all PDF form field types (textfield, datefield, checkbox, radiobuttongroup, etc.)
-  - Provides methods: `extract()`, `list_fields()`, `get_field_value()`, `has_form()`, `fill_form()`
+  - Provides methods: `extract()`, `list_fields()`, `get_field_value()`, `has_form()`, `fill_form()`, `fill_form_with_pdfcpu()`
 
 - **PDFFormData**: Dataclass representing extracted form data
 - **PDFField**: Pydantic model representing individual form fields with geometry support
@@ -226,9 +227,11 @@ See `pyproject.toml`:
 - `pydantic` - Data validation
 - `pypdf>=5` - PDF manipulation library
 
-### No External Binary Dependencies
+### Optional External Binary Dependencies
 
-Unlike previous versions that required pdfcpu to be installed, this version uses pure Python pypdf library.
+- `pdfcpu` - Optional external binary for filling PDF forms via `--pdfcpu` CLI option
+  - Only required when using `fill_form_with_pdfcpu()` method or `--pdfcpu` CLI flag
+  - pypdf is used by default for all operations including form filling
 
 ## Common Tasks
 
@@ -301,6 +304,7 @@ If you're migrating from a version that used pdfcpu:
    - `PDFCPUExecutionError` → `PDFFormError`
 3. **Constructor changed**: Removed `pdfcpu_path` and `geometry_backend` parameters
 4. **API remains compatible**: All other methods work the same way
+5. **Optional pdfcpu support**: pdfcpu is now available as an optional backend for form filling via `fill_form_with_pdfcpu()` method or `--pdfcpu` CLI flag
 
 Old exception names are kept as aliases for backwards compatibility.
 

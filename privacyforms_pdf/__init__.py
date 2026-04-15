@@ -16,6 +16,7 @@ from .extractor import (
     PDFFormNotFoundError,
     get_available_geometry_backends,
     has_geometry_support,
+    is_pdfcpu_available,
 )
 
 __version__ = "0.1.3"
@@ -39,4 +40,5 @@ __all__ = [
     # Utility functions
     "get_available_geometry_backends",
     "has_geometry_support",
+    "is_pdfcpu_available",
 ]

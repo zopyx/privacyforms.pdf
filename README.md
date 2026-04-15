@@ -1,7 +1,7 @@
 # privacyforms-pdf
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
-[![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/privacyforms.pdf/actions/workflows/ci.yml)
+[![Python 3.14+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
 
@@ -10,7 +10,7 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 ## Features
 
 - Extract form data from PDF files using pure Python (no external dependencies)
-- Fill PDF forms programmatically
+- Fill PDF forms programmatically using pypdf or pdfcpu
 - Extract field geometry (position and size) information
 - Command-line interface with multiple commands
 - Full type hints and comprehensive test coverage (99%)
@@ -20,6 +20,20 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 
 - Python 3.14+
 - pypdf >= 5.0
+- pdfcpu >= 0.9 (optional, for `--pdfcpu` fill-form option)
+
+### Optional: Installing pdfcpu
+
+pdfcpu is only required if you want to use the `--pdfcpu` option for filling forms.
+It can handle some PDFs that pypdf may have issues with.
+
+```bash
+# macOS
+brew install pdfcpu
+
+# Or download from https://github.com/pdfcpu/pdfcpu/releases
+# Make sure pdfcpu is in your PATH
+```
 
 ## Installation
 
@@ -69,6 +83,12 @@ pdf-forms fill-form form.pdf data.json
 
 # Fill with strict mode (requires all form fields)
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
+
+# Fill using pdfcpu instead of pypdf (requires pdfcpu to be installed)
+pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu
+
+# Fill using a custom pdfcpu binary path
+pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu --pdfcpu-path /usr/local/bin/pdfcpu
 ```
 
 #### JSON Format
@@ -130,6 +150,12 @@ extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
 errors = extractor.validate_form_data("form.pdf", form_data)
 if errors:
     print("Validation errors:", errors)
+
+# Fill a form using pdfcpu (requires pdfcpu to be installed)
+# This can be useful when pypdf has issues with certain PDFs
+from privacyforms_pdf import is_pdfcpu_available
+if is_pdfcpu_available():
+    extractor.fill_form_with_pdfcpu("form.pdf", form_data, "filled.pdf")
 ```
 
 ## API Reference
@@ -160,8 +186,9 @@ extractor = PDFFormExtractor(
 - `get_field_by_id(pdf_path: str | Path, field_id: str) -> PDFField | None`: Get a form field by its ID.
 - `get_field_by_name(pdf_path: str | Path, field_name: str) -> PDFField | None`: Get a form field by its name.
 - `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
-- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data.
-- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file.
+- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data using pypdf.
+- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file using pypdf.
+- `fill_form_with_pdfcpu(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True, pdfcpu_path: str = "pdfcpu") -> Path`: Fill a PDF form with data using pdfcpu binary.
 
 ### Data Classes
 
@@ -199,6 +226,8 @@ Represents the geometry (position and size) of a form field.
 - `y: float`: Bottom coordinate (PDF coordinate system).
 - `width: float`: Field width in points.
 - `height: float`: Field height in points.
+- `normalized_y: float`: Y position quantized to 15-point buckets for row grouping (legacy method).
+- `row_y: float`: Y position of the row cluster center computed using adaptive clustering (recommended for row grouping).
 - `units: str`: Unit of measurement (always "pt" for points).
 
 ### JSON Export Format
@@ -225,6 +254,8 @@ When using `pdf-forms extract` or `extract_to_json()`, the output JSON has the f
         "y": 1077.0,
         "width": 361.0,
         "height": 27.0,
+        "normalized_y": 1075.0,
+        "row_y": 1075.0,
         "units": "pt"
       },
       "format": null,
@@ -248,6 +279,8 @@ The `geometry` object contains the field's position and size in PDF points (1/72
 - `rect`: Array of `[x0, y0, x1, y1]` coordinates
 - `x`, `y`: Bottom-left corner position
 - `width`, `height`: Field dimensions
+- `normalized_y`: Y position quantized to 15-point buckets (fields within ±15 points share the same value)
+- `row_y`: Y position of the row cluster center using adaptive clustering analysis (recommended for row grouping - groups fields more intelligently based on the distribution of all positions)
 - Note: PDF coordinates have origin (0,0) at bottom-left of the page
 - `width: float`: Field width in points.
 - `height: float`: Field height in points.
@@ -263,6 +296,12 @@ The `geometry` object contains the field's position and size in PDF points (1/72
 - `PDFCPUError` (alias for `PDFFormError`)
 - `PDFCPUNotFoundError` (alias for `PDFFormError`)
 - `PDFCPUExecutionError` (alias for `PDFFormError`)
+
+### Utility Functions
+
+- `is_pdfcpu_available(pdfcpu_path: str = "pdfcpu") -> bool`: Check if pdfcpu binary is available in the system PATH.
+- `get_available_geometry_backends() -> list[str]`: Return list of available geometry backends (always `["pypdf"]`).
+- `has_geometry_support() -> bool`: Check if geometry extraction is supported (always `True`).
 
 ## Development
 

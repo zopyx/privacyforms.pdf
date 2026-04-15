@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import json
+import logging
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader, PdfWriter
-
-if TYPE_CHECKING:
-    from pypdf.generic import ArrayObject
+from pypdf.generic import (
+    ArrayObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    StreamObject,
+    TextStringObject,
+)
 
 
 class PDFFormError(Exception):
@@ -51,6 +60,106 @@ class FormValidationError(PDFFormError):
         return self.message
 
 
+class _PypdfWarningFilter(logging.Filter):
+    """Filter noisy non-fatal pypdf warnings."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Annotation sizes differ:" not in record.getMessage()
+
+
+def _install_pypdf_warning_filter() -> None:
+    """Install warning filter once for pypdf logger."""
+    for logger_name in ("pypdf", "pypdf.generic._link"):
+        logger = logging.getLogger(logger_name)
+        if not any(isinstance(f, _PypdfWarningFilter) for f in logger.filters):
+            logger.addFilter(_PypdfWarningFilter())
+
+
+def cluster_y_positions(
+    y_positions: list[float], default_threshold: float = 15.0
+) -> dict[float, float]:
+    """Cluster Y positions into rows using adaptive gap detection.
+
+    This function analyzes the distribution of Y coordinates and groups
+    positions that are likely part of the same visual row. It uses
+    statistical analysis of gaps between consecutive positions to
+    automatically determine an appropriate threshold.
+
+    The algorithm works by:
+    1. Sorting all Y positions
+    2. Calculating gaps between consecutive positions
+    3. Using percentile analysis to find natural row breaks
+    4. Clustering positions where gaps are smaller than the adaptive threshold
+
+    This approach adapts to different form layouts - tight forms with small
+    row spacing and loose forms with large row spacing are both handled well.
+
+    Args:
+        y_positions: List of Y coordinates from form fields.
+        default_threshold: Maximum within-row gap (default 15.0).
+
+    Returns:
+        Dictionary mapping each original Y position to its cluster center.
+    """
+    if not y_positions:
+        return {}
+
+    if len(y_positions) == 1:
+        return {y_positions[0]: y_positions[0]}
+
+    # Sort positions and remove duplicates
+    sorted_y = sorted(set(y_positions))
+
+    if len(sorted_y) == 1:
+        return {sorted_y[0]: sorted_y[0]}
+
+    # Calculate gaps between consecutive positions
+    gaps = [sorted_y[i + 1] - sorted_y[i] for i in range(len(sorted_y) - 1)]
+    sorted_gaps = sorted(gaps)
+
+    # Find the within-row threshold using gap analysis
+    # Strategy: find the largest gap that is likely "within-row" vs "between-row"
+    # We use the 25th percentile of gaps as the base threshold
+    # This separates tight clusters (within rows) from large gaps (between rows)
+    q1_idx = len(sorted_gaps) // 4  # 25th percentile
+
+    # Within-row variation: use 25th percentile as base
+    # This captures the typical "within row" variation
+    within_row_threshold = sorted_gaps[q1_idx] if q1_idx < len(sorted_gaps) else default_threshold
+
+    # Adaptive threshold: 75th percentile + small buffer, capped at reasonable max
+    # The buffer accounts for slight variations, but we cap it to prevent over-grouping
+    threshold = min(within_row_threshold * 1.5, default_threshold)
+
+    # Ensure threshold is reasonable (between 10 and default_threshold)
+    threshold = max(10.0, min(threshold, default_threshold))
+
+    # Cluster positions
+    clusters: list[list[float]] = []
+    current_cluster: list[float] = [sorted_y[0]]
+
+    for i in range(1, len(sorted_y)):
+        gap = sorted_y[i] - sorted_y[i - 1]
+        if gap <= threshold:
+            # Same cluster (row)
+            current_cluster.append(sorted_y[i])
+        else:
+            # New cluster (row)
+            clusters.append(current_cluster)
+            current_cluster = [sorted_y[i]]
+
+    clusters.append(current_cluster)
+
+    # Map each position to its cluster center (mean of cluster)
+    position_to_cluster: dict[float, float] = {}
+    for cluster in clusters:
+        center = sum(cluster) / len(cluster)
+        for pos in cluster:
+            position_to_cluster[pos] = center
+
+    return position_to_cluster
+
+
 class FieldGeometry(BaseModel):
     """Geometry information for a PDF form field.
 
@@ -62,10 +171,17 @@ class FieldGeometry(BaseModel):
         width: Field width in points.
         height: Field height in points.
         units: Unit of measurement (always "pt" for points).
+        normalized_y: Y position quantized to 15-point buckets for row grouping.
+        row_y: Y position of the row cluster (adaptive clustering for row grouping).
     """
 
     page: int
     rect: tuple[float, float, float, float]
+    # Store computed row_y after clustering analysis
+    _row_y: float | None = None
+
+    # Tolerance for position normalization (15 PDF points)
+    _POSITION_TOLERANCE: float = 15.0
 
     @property
     def x(self) -> float:
@@ -87,11 +203,47 @@ class FieldGeometry(BaseModel):
         """Field height in points."""
         return self.rect[3] - self.rect[1]
 
+    @property
+    def normalized_y(self) -> float:
+        """Y position quantized to tolerance buckets for row grouping.
+
+        Fields with normalized_y values within +/- tolerance are considered
+        to be on the same visual row for sorting and display purposes.
+        """
+        tolerance = self._POSITION_TOLERANCE
+        return round(self.y / tolerance) * tolerance
+
+    @property
+    def row_y(self) -> float:
+        """Y position of the row cluster center.
+
+        This is computed using adaptive clustering analysis of all field
+        positions in the PDF. Fields with the same row_y are on the same
+        visual row.
+
+        Returns:
+            The cluster center Y coordinate, or the original Y if not clustered.
+        """
+        if self._row_y is not None:
+            return self._row_y
+        return self.y
+
+    def set_row_y(self, value: float) -> None:
+        """Set the computed row cluster Y position.
+
+        This is called after clustering analysis is performed on all fields.
+
+        Args:
+            value: The cluster center Y coordinate.
+        """
+        self._row_y = value
+
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG002
         """Convert to dictionary for JSON serialization.
 
         Returns:
-            Dictionary with page, rect, x, y, width, height, units.
+            Dictionary with page, rect, x, y, width, height, normalized_y,
+            row_y, and units.
         """
         return {
             "page": self.page,
@@ -100,6 +252,8 @@ class FieldGeometry(BaseModel):
             "y": self.y,
             "width": self.width,
             "height": self.height,
+            "normalized_y": self.normalized_y,
+            "row_y": self.row_y,
             "units": "pt",
         }
 
@@ -292,6 +446,19 @@ class PDFFormExtractor:
         """
         self._timeout_seconds = timeout_seconds
         self._extract_geometry = extract_geometry
+        self._last_fill_backend = "pypdf"
+        self._last_fill_backend_reason: str | None = None
+        _install_pypdf_warning_filter()
+
+    @property
+    def last_fill_backend(self) -> str:
+        """Return the backend used for the most recent fill operation."""
+        return self._last_fill_backend
+
+    @property
+    def last_fill_backend_reason(self) -> str | None:
+        """Return an optional explanation for the most recent backend choice."""
+        return self._last_fill_backend_reason
 
     @staticmethod
     def _get_field_type(field: dict[str, Any]) -> str:
@@ -422,12 +589,74 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
+    _DEFAULT_ROW_GAP_THRESHOLD = 15.0  # Default gap threshold for row detection
+
+    def _compute_and_set_row_clusters(self, fields: list[PDFField]) -> None:
+        """Compute row clusters and set row_y on each field's geometry.
+
+        This method analyzes all field Y positions using adaptive clustering
+        and sets the computed row cluster center on each geometry object.
+
+        Args:
+            fields: List of PDFField objects to process.
+        """
+        # Collect all Y positions for clustering analysis
+        y_positions: list[float] = []
+        for field in fields:
+            if field.geometry:
+                y_positions.append(field.geometry.y)
+
+        if not y_positions:
+            return
+
+        # Build Y position clusters for row grouping
+        y_clusters = cluster_y_positions(y_positions, self._DEFAULT_ROW_GAP_THRESHOLD)
+
+        # Set row_y on each geometry
+        for field in fields:
+            if field.geometry:
+                cluster_y = y_clusters.get(field.geometry.y, field.geometry.y)
+                field.geometry.set_row_y(cluster_y)
+
+    def _sort_fields(self, fields: list[PDFField]) -> list[PDFField]:
+        """Sort fields by page number and position.
+
+        Sorting order:
+        1. Page number (ascending)
+        2. Y position (descending - top to bottom in PDF coordinates)
+        3. X position (ascending - left to right)
+
+        Fields are grouped into rows using pre-computed row_y values from
+        adaptive clustering. This handles forms with varying row spacing
+        better than a fixed tolerance.
+
+        Args:
+            fields: List of PDFField objects to sort.
+
+        Returns:
+            Sorted list of PDFField objects.
+        """
+
+        def sort_key(field: PDFField) -> tuple[int, float, float]:
+            page = field.pages[0] if field.pages else 1
+            if field.geometry:
+                # Use pre-computed row_y for row grouping, original X for ordering
+                # Y is descending (higher Y = higher on page)
+                # X is ascending (left to right)
+                return (page, -field.geometry.row_y, field.geometry.x)
+            return (page, 0.0, 0.0)
+
+        return sorted(fields, key=sort_key)
+
     def extract(self, pdf_path: str | Path) -> PDFFormData:
         """Extract form data from a PDF file.
 
         This method extracts form data from the PDF using pypdf and
         parses it into a structured format. If extract_geometry is True,
         field positions and sizes will also be extracted.
+
+        Fields are sorted by page number and position (top-to-bottom,
+        left-to-right) for consistent output.
 
         Args:
             pdf_path: Path to the PDF file.
@@ -486,6 +715,12 @@ class PDFFormExtractor:
                 options=options,
             )
             pdf_fields.append(pdf_field)
+
+        # Compute row clustering and set row_y on each geometry
+        self._compute_and_set_row_clusters(pdf_fields)
+
+        # Sort fields by page and position for consistent output
+        pdf_fields = self._sort_fields(pdf_fields)
 
         # Build raw data structure for compatibility
         raw_data = self._build_raw_data_structure(pdf_fields, str(pdf_path))
@@ -808,6 +1043,12 @@ class PDFFormExtractor:
 
         return errors
 
+    @staticmethod
+    def _should_fallback_from_pdfcpu(error_message: str) -> bool:
+        """Return True for known pdfcpu form-compatibility failures."""
+        normalized = error_message.lower()
+        return "required entry=da missing" in normalized or "unexpected panic attack" in normalized
+
     def fill_form(
         self,
         pdf_path: str | Path,
@@ -840,6 +1081,8 @@ class PDFFormExtractor:
             >>> form_data = {"Candidate Name": "John Smith", "Full time": True}
             >>> extractor.fill_form("form.pdf", form_data, "filled.pdf")
         """
+        self._last_fill_backend = "pypdf"
+        self._last_fill_backend_reason = None
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
 
@@ -855,29 +1098,48 @@ class PDFFormExtractor:
 
         # Read the PDF
         reader = PdfReader(str(pdf_path))
+        fields = reader.get_fields() or {}
         writer = PdfWriter()
 
         # Copy all pages and form fields
         writer.append(reader)
 
         # Fill form fields - collect all values first
-        field_values = {}
+        field_values: dict[str, str] = {}
+        radio_field_values: dict[str, str] = {}
+        listbox_field_values: dict[str, str] = {}
         for field_name, value in form_data.items():
             # pypdf expects string values
             # For checkboxes, use /Yes or /Off
             str_value = ("/Yes" if value else "/Off") if isinstance(value, bool) else str(value)
             field_values[field_name] = str_value
+            field_type = self._get_field_type(fields.get(field_name, {}))
+            if field_type == "radiobuttongroup":
+                radio_field_values[field_name] = str_value
+            elif field_type == "listbox":
+                listbox_field_values[field_name] = str_value
 
         # Update all fields at once on all pages where they appear
         if field_values:
-            # We need to call update_page_form_field_values for each page
-            # to ensure all widgets are updated. pypdf 5+ correctly handles
-            # this by only updating widgets present on the passed page.
-            for page in writer.pages:
-                writer.update_page_form_field_values(
-                    page,
-                    field_values,
-                )
+            try:
+                # We need to call update_page_form_field_values for each page
+                # to ensure all widgets are updated. pypdf 5+ correctly handles
+                # this by only updating widgets present on the passed page.
+                for page in writer.pages:
+                    writer.update_page_form_field_values(
+                        page,
+                        field_values,
+                    )
+            except AttributeError as exc:
+                # Work around pypdf appearance-generation crashes on some PDFs
+                # (e.g. "'int' object has no attribute 'encode'").
+                if "'int' object has no attribute 'encode'" not in str(exc):
+                    raise
+                self._fill_form_fields_without_appearance(writer, field_values)
+            if radio_field_values:
+                self._sync_radio_button_states(writer, radio_field_values)
+            if listbox_field_values:
+                self._sync_listbox_selection_indexes(writer, listbox_field_values)
 
         # Write output
         output_file = Path(output_path) if output_path else pdf_path
@@ -885,6 +1147,350 @@ class PDFFormExtractor:
             writer.write(f)
 
         return output_file
+
+    def _fill_form_fields_without_appearance(
+        self,
+        writer: PdfWriter,
+        field_values: dict[str, str],
+    ) -> None:
+        """Fallback form fill that skips appearance-stream generation."""
+        writer.set_need_appearances_writer(True)
+        radio_field_values: dict[str, str] = {}
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            if not annotations:
+                continue
+
+            for annotation_ref in annotations:
+                annotation = annotation_ref.get_object()
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+
+                if "/FT" in annotation and "/T" in annotation:
+                    parent_annotation = annotation
+                else:
+                    parent_ref = annotation.get("/Parent")
+                    parent_annotation = parent_ref.get_object() if parent_ref else annotation
+
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+
+                matched_field_name = None
+                for field_name in field_values:
+                    if field_name in (qualified_name, annotation_name, parent_name):
+                        matched_field_name = field_name
+                        break
+                if matched_field_name is None:
+                    continue
+
+                value = field_values[matched_field_name]
+                field_type = parent_annotation.get("/FT", annotation.get("/FT"))
+                if field_type == "/Btn":
+                    if self._get_field_type(parent_annotation) == "radiobuttongroup":
+                        text_value = TextStringObject(value)
+                        parent_annotation[NameObject("/V")] = text_value
+                        annotation[NameObject("/V")] = text_value
+                        radio_field_values[matched_field_name] = value
+                    else:
+                        button_value = NameObject(value if value.startswith("/") else f"/{value}")
+                        parent_annotation[NameObject("/V")] = button_value
+                        annotation[NameObject("/V")] = button_value
+                        annotation[NameObject("/AS")] = button_value
+                else:
+                    text_value = TextStringObject(value)
+                    parent_annotation[NameObject("/V")] = text_value
+                    annotation[NameObject("/V")] = text_value
+
+        if radio_field_values:
+            self._sync_radio_button_states(writer, radio_field_values)
+
+        listbox_field_values = {
+            field_name: value
+            for field_name, value in field_values.items()
+            if self._get_field_type(self.get_field_by_name_from_writer(writer, field_name) or {})
+            == "listbox"
+        }
+        if listbox_field_values:
+            self._sync_listbox_selection_indexes(writer, listbox_field_values)
+
+    def get_field_by_name_from_writer(
+        self,
+        writer: PdfWriter,
+        field_name: str,
+    ) -> dict[str, Any] | None:
+        """Find a field annotation by name in writer pages."""
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            for annotation_ref in annotations:
+                annotation, parent_annotation = self._get_widget_annotation(annotation_ref)
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+                if field_name in (qualified_name, annotation_name, parent_name):
+                    return parent_annotation
+        return None
+
+    @staticmethod
+    def _get_widget_annotation(
+        annotation_ref: Any,
+    ) -> tuple[DictionaryObject, DictionaryObject]:
+        """Resolve widget and parent annotations."""
+        annotation = cast(
+            "DictionaryObject",
+            (
+                annotation_ref.get_object()
+                if hasattr(annotation_ref, "get_object")
+                else annotation_ref
+            ),
+        )
+        parent_ref = annotation.get("/Parent")
+        parent_annotation = cast(
+            "DictionaryObject",
+            parent_ref.get_object() if parent_ref else annotation,
+        )
+        return annotation, parent_annotation
+
+    @staticmethod
+    def _get_widget_on_state(annotation: dict[str, Any]) -> str | None:
+        """Return the non-Off appearance state for a widget, if any."""
+        ap = annotation.get("/AP")
+        if not ap or "/N" not in ap:
+            return None
+
+        for state in ap["/N"]:
+            state_name = str(state)
+            if state_name.lower() != "/off":
+                return state_name
+        return None
+
+    @classmethod
+    def _resolve_radio_field_state(
+        cls,
+        parent_annotation: dict[str, Any],
+        value: str,
+    ) -> str:
+        """Resolve the selected on-state name for a radio group."""
+        normalized_value = value if value.startswith("/") else f"/{value}"
+        kids = parent_annotation.get("/Kids", [])
+
+        for kid_ref in kids:
+            kid_annotation = kid_ref.get_object() if hasattr(kid_ref, "get_object") else kid_ref
+            kid_state = cls._get_widget_on_state(kid_annotation)
+            if kid_state == normalized_value:
+                return normalized_value
+
+        options = cls._get_field_options(parent_annotation)
+        if options:
+            option_value = value[1:] if value.startswith("/") else value
+            for index, option in enumerate(options):
+                if option != option_value or index >= len(kids):
+                    continue
+                kid_annotation = (
+                    kids[index].get_object() if hasattr(kids[index], "get_object") else kids[index]
+                )
+                kid_state = cls._get_widget_on_state(kid_annotation)
+                if kid_state is not None:
+                    return kid_state
+
+        for kid_ref in kids:
+            kid_annotation = kid_ref.get_object() if hasattr(kid_ref, "get_object") else kid_ref
+            kid_state = cls._get_widget_on_state(kid_annotation)
+            if kid_state and kid_state.lstrip("/") == value.lstrip("/"):
+                return kid_state
+
+        return "/Off"
+
+    def _sync_radio_button_states(
+        self,
+        writer: PdfWriter,
+        field_values: dict[str, str],
+    ) -> None:
+        """Update radio widget appearances to match the selected option."""
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            if not annotations:
+                continue
+
+            for annotation_ref in annotations:
+                annotation, parent_annotation = self._get_widget_annotation(annotation_ref)
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+                if parent_annotation.get("/FT", annotation.get("/FT")) != "/Btn":
+                    continue
+                if self._get_field_type(parent_annotation) != "radiobuttongroup":
+                    continue
+
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+
+                matched_field_name = None
+                for field_name in field_values:
+                    if field_name in (qualified_name, annotation_name, parent_name):
+                        matched_field_name = field_name
+                        break
+                if matched_field_name is None:
+                    continue
+
+                selected_state = self._resolve_radio_field_state(
+                    parent_annotation,
+                    field_values[matched_field_name],
+                )
+                widget_state = self._get_widget_on_state(annotation)
+                state = selected_state if widget_state == selected_state else "/Off"
+                parent_annotation[NameObject("/V")] = NameObject(selected_state)
+                annotation[NameObject("/AS")] = NameObject(state)
+                annotation[NameObject("/V")] = NameObject(state)
+
+    @staticmethod
+    def _resolve_listbox_index(parent_annotation: dict[str, Any], value: str) -> int | None:
+        """Resolve the selected index for a listbox value."""
+        options = PDFFormExtractor._get_field_options(parent_annotation)
+        normalized_value = value[1:] if value.startswith("/") else value
+        for index, option in enumerate(options):
+            if option == normalized_value:
+                return index
+        return None
+
+    def _sync_listbox_selection_indexes(
+        self,
+        writer: PdfWriter,
+        field_values: dict[str, str],
+    ) -> None:
+        """Update listbox values and selection indexes for viewer highlighting."""
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            if not annotations:
+                continue
+
+            for annotation_ref in annotations:
+                annotation, parent_annotation = self._get_widget_annotation(annotation_ref)
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+                if parent_annotation.get("/FT", annotation.get("/FT")) != "/Ch":
+                    continue
+                if self._get_field_type(parent_annotation) != "listbox":
+                    continue
+
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+
+                matched_field_name = None
+                for field_name in field_values:
+                    if field_name in (qualified_name, annotation_name, parent_name):
+                        matched_field_name = field_name
+                        break
+                if matched_field_name is None:
+                    continue
+
+                value = field_values[matched_field_name]
+                selected_index = self._resolve_listbox_index(parent_annotation, value)
+                text_value = TextStringObject(value)
+                parent_annotation[NameObject("/V")] = text_value
+                annotation[NameObject("/V")] = text_value
+                if selected_index is not None:
+                    indexes = ArrayObject([NumberObject(selected_index)])
+                    parent_annotation[NameObject("/I")] = indexes
+                    annotation[NameObject("/I")] = ArrayObject([NumberObject(selected_index)])
+                    parent_annotation[NameObject("/TI")] = NumberObject(selected_index)
+                    annotation[NameObject("/TI")] = NumberObject(selected_index)
+                appearance_ref = self._build_listbox_appearance_stream(
+                    writer,
+                    annotation,
+                    parent_annotation,
+                    selected_index,
+                )
+                if appearance_ref is not None:
+                    if "/AP" not in annotation:
+                        annotation[NameObject("/AP")] = DictionaryObject()
+                    appearance_dict = cast("DictionaryObject", annotation["/AP"])
+                    appearance_dict[NameObject("/N")] = appearance_ref
+
+    @staticmethod
+    def _escape_pdf_text(value: str) -> str:
+        """Escape text for use in a PDF string literal."""
+        return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def _build_listbox_appearance_stream(
+        self,
+        writer: PdfWriter,
+        annotation: dict[str, Any],
+        parent_annotation: dict[str, Any],
+        selected_index: int | None,
+    ) -> Any | None:
+        """Build a listbox appearance stream with highlighted selection."""
+        options = self._get_field_options(parent_annotation)
+        if not options:
+            return None
+
+        ap = annotation.get("/AP")
+        normal_ap = ap.get("/N").get_object() if ap and "/N" in ap else None
+        resources = (
+            cast("DictionaryObject", normal_ap.get("/Resources"))
+            if normal_ap is not None and "/Resources" in normal_ap
+            else DictionaryObject()
+        )
+
+        bbox = (
+            normal_ap.get("/BBox")
+            if normal_ap is not None and "/BBox" in normal_ap
+            else ArrayObject(
+                [NumberObject(0), NumberObject(0), NumberObject(150), NumberObject(60)]
+            )
+        )
+        width = float(bbox[2]) - float(bbox[0])
+        height = float(bbox[3]) - float(bbox[1])
+        line_height = height / max(len(options), 1)
+        font_size = max(8.0, min(12.0, line_height * 0.75))
+
+        font_name = "/F0"
+        if "/Font" in resources and resources["/Font"]:
+            fonts = cast("DictionaryObject", resources["/Font"])
+            font_name = str(next(iter(fonts.keys())))
+
+        lines: list[str] = [
+            "q",
+            "/Tx BMC",
+            "q",
+            f"1 1 {max(width - 2, 1):.3f} {max(height - 2, 1):.3f} re",
+            "W",
+            "n",
+        ]
+        if selected_index is not None:
+            highlight_y = height - (selected_index + 1) * line_height
+            lines.extend(
+                [
+                    "0.600006 0.756866 0.854904 rg",
+                    f"1 {highlight_y:.3f} {max(width - 2, 1):.3f} {line_height:.3f} re",
+                    "f",
+                ]
+            )
+
+        lines.extend(
+            [
+                "BT",
+                f"{font_name} {font_size:.3f} Tf",
+            ]
+        )
+        for index, option in enumerate(options):
+            lines.append("1 g" if index == selected_index else "0 g")
+            text_y = height - ((index + 1) * line_height) + ((line_height - font_size) / 2)
+            escaped = self._escape_pdf_text(str(option))
+            lines.append(f"1 0 0 1 2 {text_y:.3f} Tm")
+            lines.append(f"({escaped}) Tj")
+        lines.extend(["ET", "Q", "EMC", "Q"])
+
+        stream = StreamObject()
+        stream[NameObject("/Type")] = NameObject("/XObject")
+        stream[NameObject("/Subtype")] = NameObject("/Form")
+        stream[NameObject("/BBox")] = bbox
+        stream[NameObject("/Resources")] = resources
+        stream.set_data("\n".join(lines).encode("utf-8"))
+        return writer._add_object(stream)
 
     def fill_form_from_json(
         self,
@@ -928,6 +1534,240 @@ class PDFFormExtractor:
 
         return self.fill_form(pdf_path, form_data, output_path, validate=validate)
 
+    def _run_pdfcpu_command(self, cmd: list[str]) -> None:
+        """Run a pdfcpu command and normalize execution failures."""
+        try:
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout_seconds,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            error_msg = f"pdfcpu failed with exit code {e.returncode}"
+            if e.stderr:
+                error_msg += f": {e.stderr}"
+            raise PDFFormError(error_msg) from e
+        except subprocess.TimeoutExpired as e:
+            raise PDFFormError(f"pdfcpu timed out after {self._timeout_seconds} seconds") from e
+        except FileNotFoundError as e:
+            raise PDFFormError(f"pdfcpu binary not found: {cmd[0]}") from e
+
+    def _export_pdfcpu_form_data(self, pdf_path: Path, pdfcpu_binary: str) -> dict[str, Any]:
+        """Export a PDF form using pdfcpu so its full field metadata is preserved."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as temp_json:
+            temp_json_path = Path(temp_json.name)
+
+        try:
+            self._run_pdfcpu_command(
+                [pdfcpu_binary, "form", "export", str(pdf_path), str(temp_json_path)]
+            )
+
+            with open(temp_json_path, encoding="utf-8") as f:
+                return cast("dict[str, Any]", json.load(f))
+        finally:
+            if temp_json_path.exists():
+                temp_json_path.unlink()
+
+    @staticmethod
+    def _build_pdfcpu_field_index(
+        pdfcpu_data: dict[str, Any],
+    ) -> tuple[dict[str, tuple[str, dict[str, Any]]], dict[str, tuple[str, dict[str, Any]]]]:
+        """Index exported pdfcpu fields by exact and terminal field name."""
+        exact_matches: dict[str, tuple[str, dict[str, Any]]] = {}
+        suffix_candidates: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+
+        for form in pdfcpu_data.get("forms", []):
+            if not isinstance(form, dict):
+                continue
+
+            for field_type, entries in form.items():
+                if not isinstance(entries, list):
+                    continue
+
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+
+                    field_id = entry.get("id")
+                    if field_id is not None:
+                        exact_matches[str(field_id)] = (field_type, entry)
+
+                    field_name = entry.get("name")
+                    if field_name is None:
+                        continue
+
+                    field_name_str = str(field_name)
+                    exact_matches[field_name_str] = (field_type, entry)
+                    suffix_candidates.setdefault(field_name_str.rsplit(".", 1)[-1], []).append(
+                        (field_type, entry)
+                    )
+
+        suffix_matches = {
+            suffix: matches[0] for suffix, matches in suffix_candidates.items() if len(matches) == 1
+        }
+
+        return exact_matches, suffix_matches
+
+    def _merge_pdfcpu_form_data(
+        self,
+        pdfcpu_data: dict[str, Any],
+        form_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Merge simple key:value form data into exported pdfcpu JSON."""
+        exact_matches, suffix_matches = self._build_pdfcpu_field_index(pdfcpu_data)
+
+        for field_name, value in form_data.items():
+            lookup_key = str(field_name)
+            field_match = exact_matches.get(lookup_key) or suffix_matches.get(lookup_key)
+            if field_match is None:
+                continue
+
+            field_type, field_entry = field_match
+
+            if field_type == "checkbox":
+                field_entry["value"] = bool(value)
+                continue
+
+            if field_type == "listbox":
+                if isinstance(value, list):
+                    field_entry.pop("value", None)
+                    field_entry["values"] = [str(item) for item in value]
+                else:
+                    field_entry.pop("values", None)
+                    field_entry["value"] = str(value)
+                continue
+
+            field_entry["value"] = str(value)
+
+        return pdfcpu_data
+
+    def fill_form_with_pdfcpu(
+        self,
+        pdf_path: str | Path,
+        form_data: dict[str, Any],
+        output_path: str | Path | None = None,
+        *,
+        validate: bool = True,
+        pdfcpu_path: str = "pdfcpu",
+    ) -> Path:
+        """Fill a PDF form with data using pdfcpu.
+
+        This method uses the external pdfcpu binary to fill PDF forms.
+        pdfcpu must be installed and available in the system PATH or
+        specified via the pdfcpu_path parameter.
+
+        Args:
+            pdf_path: Path to the PDF file containing the form.
+            form_data: The form data to fill (format: {"Field Name": value}).
+            output_path: Optional output path. If not provided, the input PDF
+                        is modified in place.
+            validate: If True, validates form data before filling using pypdf.
+            pdfcpu_path: Path to the pdfcpu binary (default: "pdfcpu").
+
+        Returns:
+            Path to the filled PDF (output_path or pdf_path if no output specified).
+
+        Raises:
+            FileNotFoundError: If the PDF file or pdfcpu binary does not exist.
+            FormValidationError: If validation fails and validate=True.
+            PDFFormNotFoundError: If the PDF does not contain a form.
+            PDFFormError: If pdfcpu execution fails.
+
+        Example:
+            >>> form_data = {"Candidate Name": "John Smith", "Full time": True}
+            >>> extractor.fill_form_with_pdfcpu("form.pdf", form_data, "filled.pdf")
+        """
+        self._last_fill_backend = "pdfcpu"
+        self._last_fill_backend_reason = None
+        pdf_path = Path(pdf_path)
+        self._validate_pdf_path(pdf_path)
+
+        # Check if pdfcpu is available
+        pdfcpu_binary = shutil.which(pdfcpu_path)
+        if pdfcpu_binary is None:
+            raise PDFFormError(
+                f"pdfcpu binary not found: {pdfcpu_path}. "
+                "Please install pdfcpu: https://pdfcpu.io/install"
+            )
+
+        # Check if PDF has a form
+        if not self.has_form(pdf_path):
+            raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
+
+        # Validate form data if requested
+        if validate:
+            errors = self.validate_form_data(pdf_path, form_data)
+            if errors:
+                raise FormValidationError("Form data validation failed", errors)
+
+        # Prepare output path
+        output_file = Path(output_path) if output_path else pdf_path
+
+        try:
+            # Export the form via pdfcpu first and only update its values. Some PDFs
+            # require metadata in the exported JSON that pypdf does not expose.
+            pdfcpu_json_data = self._merge_pdfcpu_form_data(
+                self._export_pdfcpu_form_data(pdf_path, pdfcpu_binary),
+                form_data,
+            )
+        except PDFFormError as exc:
+            if not self._should_fallback_from_pdfcpu(str(exc)):
+                raise
+
+            result = self.fill_form(pdf_path, form_data, output_file, validate=False)
+            self._last_fill_backend = "pypdf-fallback"
+            self._last_fill_backend_reason = (
+                "pdfcpu could not process the source form metadata; used pypdf instead"
+            )
+            return result
+
+        # Create a temporary JSON file for pdfcpu
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as temp_json:
+            json.dump(pdfcpu_json_data, temp_json, indent=2)
+            temp_json_path = Path(temp_json.name)
+
+        try:
+            # Build pdfcpu command
+            # pdfcpu form fill <inFile> <formDataFile> <outFile>
+            cmd = [
+                pdfcpu_binary,
+                "form",
+                "fill",
+                str(pdf_path),
+                str(temp_json_path),
+                str(output_file),
+            ]
+
+            try:
+                self._run_pdfcpu_command(cmd)
+            except PDFFormError as exc:
+                if not self._should_fallback_from_pdfcpu(str(exc)):
+                    raise
+
+                result = self.fill_form(pdf_path, form_data, output_file, validate=False)
+                self._last_fill_backend = "pypdf-fallback"
+                self._last_fill_backend_reason = (
+                    "pdfcpu could not process the source form metadata; used pypdf instead"
+                )
+                return result
+
+            # Verify output file was created
+            if not output_file.exists():
+                raise PDFFormError(f"pdfcpu did not create output file: {output_file}")
+
+            return output_file
+
+        finally:
+            # Clean up temporary JSON file
+            if temp_json_path.exists():
+                temp_json_path.unlink()
+
     def _validate_pdf_path(self, pdf_path: Path) -> None:
         """Validate that the PDF path exists and is a file.
 
@@ -941,6 +1781,18 @@ class PDFFormExtractor:
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
         if not pdf_path.is_file():
             raise FileNotFoundError(f"Path is not a file: {pdf_path}")
+
+
+def is_pdfcpu_available(pdfcpu_path: str = "pdfcpu") -> bool:
+    """Check if pdfcpu binary is available.
+
+    Args:
+        pdfcpu_path: Path to the pdfcpu binary (default: "pdfcpu").
+
+    Returns:
+        True if pdfcpu is available in the system PATH, False otherwise.
+    """
+    return shutil.which(pdfcpu_path) is not None
 
 
 def get_available_geometry_backends() -> list[str]:
