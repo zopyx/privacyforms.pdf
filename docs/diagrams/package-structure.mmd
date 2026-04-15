@@ -1,0 +1,15 @@
+graph TD
+    Root[privacyforms-pdf/] --> P[privacyforms_pdf/]
+    Root --> T[tests/]
+    Root --> S[samples/]
+    Root --> D[demo/]
+    Root --> G[.github/workflows/]
+    Root --> Py[pyproject.toml]
+
+    P --> I[__init__.py]
+    P --> E[extractor.py]
+    P --> CLI[cli.py]
+
+    T --> C[conftest.py]
+    T --> TE[test_extractor.py]
+    T --> TC[test_cli.py]

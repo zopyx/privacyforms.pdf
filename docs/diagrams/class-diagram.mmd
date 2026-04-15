@@ -1,0 +1,77 @@
+classDiagram
+    class PDFFormExtractor {
+        -float _timeout_seconds
+        -bool _extract_geometry
+        +__init__(timeout_seconds, extract_geometry)
+        +has_form(pdf_path) bool
+        +extract(pdf_path) PDFFormData
+        +extract_to_json(pdf_path, output_path)
+        +list_fields(pdf_path) list~PDFField~
+        +get_field_value(pdf_path, field_name) str|bool|None
+        +get_field_by_id(pdf_path, field_id) PDFField|None
+        +get_field_by_name(pdf_path, field_name) PDFField|None
+        +validate_form_data(pdf_path, form_data, strict, allow_extra_fields) list~str~
+        +fill_form(pdf_path, form_data, output_path, validate) Path
+        +fill_form_from_json(pdf_path, json_path, output_path, validate) Path
+        -_validate_pdf_path(pdf_path)
+        -_get_field_type(field) str$
+        -_get_field_value(field) str|bool$
+        -_get_field_options(field) list~str~$
+        -_extract_widgets_info(reader) dict
+    }
+
+    class PDFFormData {
+        +Path source
+        +str pdf_version
+        +bool has_form
+        +list~PDFField~ fields
+        +dict raw_data
+        +to_json() str
+        +to_dict() dict
+    }
+
+    class PDFField {
+        +str name
+        +str id
+        +str field_type
+        +str|bool value
+        +list~int~ pages
+        +bool locked
+        +FieldGeometry|None geometry
+        +str|None format
+        +list~str~ options
+        +model_dump() dict
+    }
+
+    class FieldGeometry {
+        +int page
+        +tuple rect
+        +float x
+        +float y
+        +float width
+        +float height
+        +str units
+        +model_dump() dict
+    }
+
+    class FormField {
+        +str field_type
+        +list~int~ pages
+        +str id
+        +str name
+        +str|bool value
+        +bool locked
+    }
+
+    class PDFFormError
+    class PDFFormNotFoundError
+    class FieldNotFoundError
+    class FormValidationError
+
+    PDFFormExtractor --> PDFFormData : creates
+    PDFFormExtractor --> PDFField : creates
+    PDFFormData --> PDFField : contains
+    PDFField --> FieldGeometry : optional
+    PDFFormError <|-- PDFFormNotFoundError
+    PDFFormError <|-- FieldNotFoundError
+    PDFFormError <|-- FormValidationError

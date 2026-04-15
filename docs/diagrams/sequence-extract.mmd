@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant E as PDFFormExtractor
+    participant V as _validate_pdf_path
+    participant R as pypdf.PdfReader
+    participant W as _extract_widgets_info
+    participant F as PDFField
+    participant D as PDFFormData
+
+    C->>E: extract(pdf_path)
+    E->>V: _validate_pdf_path(pdf_path)
+    V-->>E: OK
+    E->>R: PdfReader(str(pdf_path))
+    E->>R: get_fields()
+    R-->>E: dict[field_name, field_data]
+
+    E->>W: _extract_widgets_info(reader)
+    loop For each page with /Annots
+        W->>W: scan widget annotations
+        W->>W: extract page + geometry
+    end
+    W-->>E: widget_info
+
+    loop For each field
+        E->>E: _get_field_type(field_data)
+        E->>E: _get_field_value(field_data)
+        E->>E: _get_field_options(field_data)
+        E->>F: PDFField(name, type, value, pages, geometry, ...)
+        F-->>E: pdffield
+    end
+
+    E->>E: _build_raw_data_structure(fields, source)
+    E->>D: PDFFormData(source, version, has_form, fields, raw_data)
+    D-->>E: form_data
+    E-->>C: PDFFormData

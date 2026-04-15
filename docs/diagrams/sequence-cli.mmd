@@ -1,0 +1,17 @@
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant Cl as Click CLI
+    participant C as CLI Module
+    participant Ex as create_extractor
+    participant E as PDFFormExtractor
+
+    U->>Cl: pdf-forms extract form.pdf -o out.json
+    Cl->>C: extract(pdf_path, output, raw)
+    C->>Ex: create_extractor()
+    Ex-->>C: PDFFormExtractor()
+    C->>E: extract(pdf_path)
+    E-->>C: PDFFormData
+    C->>C: json.dump(form_data.to_dict(), f)
+    C-->>Cl: success message
+    Cl-->>U: stdout + file written

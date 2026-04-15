@@ -1,0 +1,28 @@
+graph LR
+    subgraph "Client Layer"
+        A[Python Application]
+        B[pdf-forms CLI]
+    end
+
+    subgraph "privacyforms-pdf Library"
+        C[PDFFormExtractor]
+        D[PDFField Models]
+        E[CLI Module]
+    end
+
+    subgraph "External Dependencies"
+        F[pypdf<br/>PdfReader / PdfWriter]
+    end
+
+    subgraph "I/O"
+        G[PDF Files]
+        H[JSON Files]
+    end
+
+    A -->|import| C
+    B -->|click| E
+    E -->|uses| C
+    C -->|reads/writes| F
+    F -->|processes| G
+    C -->|produces| H
+    D -.->|validated by| C
