@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from privacyforms_pdf.cli import main
+from privacyforms_pdf.models import PDFFormError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,6 +55,19 @@ Bit 12: false (print high-level(rev>=3))"""
             result = runner.invoke(main, ["list-permissions", str(pdf_file), "--raw"])
             assert result.exit_code == 0
             assert "permission bits:" in result.output.lower()
+
+    def test_list_permissions_raw_with_stderr(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test listing permissions raw mode echoes stderr."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "permission bits: 0000"
+            mock_run.return_value.stderr = "some warning"
+            result = runner.invoke(main, ["list-permissions", str(pdf_file), "--raw"])
+            assert result.exit_code == 0
+            assert "some warning" in result.output
 
     def test_list_permissions_with_password(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test listing permissions with user password."""
@@ -180,6 +194,39 @@ Bit 12: false (print high-level(rev>=3))"""
             assert "pdfcpu could not process this pdf" in result.output.lower()
             assert "not encrypted" in result.output.lower() or "malformed" in result.output.lower()
             assert "pdf-forms info" in result.output.lower()
+
+    def test_list_permissions_generic_pdfformerror(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test generic PDFFormError branch in list-permissions."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        from privacyforms_pdf.security import PDFSecurityManager
+
+        with patch.object(
+            PDFSecurityManager,
+            "list_permissions",
+            side_effect=PDFFormError("generic permission error"),
+        ):
+            result = runner.invoke(main, ["list-permissions", str(pdf_file)])
+            assert result.exit_code != 0
+            assert "failed to list permissions" in result.output.lower()
+
+    def test_list_permissions_unexpected_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test unexpected exception branch in list-permissions."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        from privacyforms_pdf.security import PDFSecurityManager
+
+        with patch.object(
+            PDFSecurityManager,
+            "list_permissions",
+            side_effect=ValueError("unexpected oops"),
+        ):
+            result = runner.invoke(main, ["list-permissions", str(pdf_file)])
+            assert result.exit_code != 0
+            assert "unexpected error" in result.output.lower()
+            assert "unexpected oops" in result.output.lower()
 
 
 class TestPermissionParser:

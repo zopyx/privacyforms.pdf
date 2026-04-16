@@ -224,6 +224,23 @@ class TestSetPermissionsCommand:
             assert result.exit_code != 0
             assert "pdfcpu could not process" in result.output.lower()
 
+    def test_set_permissions_unexpected_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test unexpected exception branch in set-permissions."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        from privacyforms_pdf.security import PDFSecurityManager
+
+        with patch.object(
+            PDFSecurityManager,
+            "set_permissions",
+            side_effect=ValueError("unexpected oops"),
+        ):
+            result = runner.invoke(main, ["set-permissions", str(pdf_file), "-opw", "ownerpass"])
+            assert result.exit_code != 0
+            assert "unexpected error" in result.output.lower()
+            assert "unexpected oops" in result.output.lower()
+
     def test_set_permissions_invalid_custom_bits(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test validation of invalid custom bits."""
         pdf_file = tmp_path / "test.pdf"

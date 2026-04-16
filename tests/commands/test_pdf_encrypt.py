@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from privacyforms_pdf.cli import main
+from privacyforms_pdf.security import PDFSecurityManager
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -231,3 +232,18 @@ class TestEncryptCommand:
             assert result.exit_code != 0
             assert "pdfcpu could not process" in result.output.lower()
             assert "malformed form fields" in result.output.lower()
+
+    def test_encrypt_unexpected_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test encrypt command catches unexpected non-PDFFormError exceptions."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        with patch.object(
+            PDFSecurityManager,
+            "encrypt",
+            side_effect=ValueError("something unexpected"),
+        ):
+            result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
+            assert result.exit_code != 0
+            assert "unexpected error" in result.output.lower()
+            assert "something unexpected" in result.output.lower()
