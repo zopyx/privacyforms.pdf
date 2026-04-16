@@ -3,8 +3,9 @@ name = "privacyforms.pdf"
 version = "0.1.3"
 description = "Python library to extract and fill PDF forms using pypdf"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 authors = [{ name = "Andreas Jung", email = "info@zopyx.com" }]
+license = { text = "MIT" }
 dependencies = [
     "click>=8",
     "pydantic>=2",

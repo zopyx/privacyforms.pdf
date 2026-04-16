@@ -2,71 +2,14 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import click
 
-# Permission bit positions (PDF spec uses bits 3-12)
-PERMISSION_BITS = {
-    "print": 3,  # Bit 3: Print (rev2), print quality (rev>=3)
-    "modify": 4,  # Bit 4: Modify other than controlled by bits 6,9,11
-    "extract": 5,  # Bit 5: Extract (rev2), extract other than bit 10 (rev>=3)
-    "annotations": 6,  # Bit 6: Add or modify annotations
-    "fill_forms": 9,  # Bit 9: Fill in form fields (rev>=3)
-    "extract_accessibility": 10,  # Bit 10: Extract (rev>=3)
-    "assemble": 11,  # Bit 11: Modify/assemble (rev>=3)
-    "print_high": 12,  # Bit 12: Print high-level (rev>=3)
-}
+from privacyforms_pdf.models import PDFFormError
+from privacyforms_pdf.security import PDFSecurityManager, build_permission_bits
 
-
-def build_permission_bits(
-    print_perm: bool = False,
-    modify: bool = False,
-    extract: bool = False,
-    annotations: bool = False,
-    fill_forms: bool = False,
-    extract_accessibility: bool = False,
-    assemble: bool = False,
-    print_high: bool = False,
-) -> str:
-    """Build a 12-bit permission string from individual flags.
-
-    Args:
-        print_perm: Allow printing
-        modify: Allow modification (except annotations/form fields)
-        extract: Allow text/graphics extraction
-        annotations: Allow adding/modifying annotations
-        fill_forms: Allow filling form fields
-        extract_accessibility: Allow extraction for accessibility
-        assemble: Allow document assembly (insert, rotate, delete pages)
-        print_high: Allow high-quality printing
-
-    Returns:
-        12-character binary string of permission bits.
-    """
-    # Initialize all bits to 0 (bits 1-12, index 0-11)
-    bits = ["0"] * 12
-
-    # Set bits based on permissions (PDF bits are 1-indexed, we use 0-indexed)
-    if print_perm:
-        bits[2] = "1"  # Bit 3
-    if modify:
-        bits[3] = "1"  # Bit 4
-    if extract:
-        bits[4] = "1"  # Bit 5
-    if annotations:
-        bits[5] = "1"  # Bit 6
-    if fill_forms:
-        bits[8] = "1"  # Bit 9
-    if extract_accessibility:
-        bits[9] = "1"  # Bit 10
-    if assemble:
-        bits[10] = "1"  # Bit 11
-    if print_high:
-        bits[11] = "1"  # Bit 12
-
-    return "".join(bits)
+__all__ = ["PDFSecurityManager", "build_permission_bits", "set_permissions_command"]
 
 
 @click.command(name="set-permissions")
@@ -204,26 +147,14 @@ def set_permissions_command(
         # Custom bits (hex or binary)
         pdf-forms set-permissions doc.pdf -opw opw --custom-bits F3C
     """
-    # Build pdfcpu permissions set command
-    cmd = [pdfcpu_path, "permissions", "set"]
+    security = PDFSecurityManager(pdfcpu_path=pdfcpu_path)
 
-    # Determine permission value (priority: custom_bits > preset > individual flags)
-    if custom_bits:
-        # Validate custom bits (hex or binary)
-        perm_value = custom_bits.strip().upper()
-        if not all(c in "01" for c in perm_value) and not all(
-            c in "0123456789ABCDEF" for c in perm_value
-        ):
-            raise click.ClickException(
-                "Invalid --custom-bits value. Must be hex (e.g., 'F3C') "
-                "or binary (e.g., '111100111100')"
-            )
-    elif permissions:
-        # Use preset
-        perm_value = permissions.lower()
-    else:
-        # Build from individual flags (default all False = none)
-        perm_value = build_permission_bits(
+    try:
+        security.set_permissions(
+            pdf_path,
+            owner_password=owner_password,
+            user_password=user_password,
+            permissions_preset=permissions,
             print_perm=print_perm,
             modify=modify_perm,
             extract=extract_perm,
@@ -232,73 +163,16 @@ def set_permissions_command(
             extract_accessibility=extract_accessibility_perm,
             assemble=assemble_perm,
             print_high=print_high_perm,
+            custom_bits=custom_bits,
         )
 
-    cmd.extend(["-perm", perm_value])
-
-    # Add passwords
-    if user_password:
-        cmd.extend(["-upw", user_password])
-    cmd.extend(["-opw", owner_password])
-
-    # Add input file (pdfcpu permissions set modifies in place)
-    cmd.append(str(pdf_path))
-
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,  # Handle errors manually
-        )
-
-        # Check for specific error conditions
-        stderr_lower = result.stderr.lower() if result.stderr else ""
-        stdout_lower = result.stdout.lower() if result.stdout else ""
-
-        # Owner password required
-        if (
-            "please provide the owner password" in stderr_lower
-            or "please provide the owner password" in stdout_lower
-        ):
-            raise click.ClickException(
-                "Incorrect owner password. The owner password is required to modify permissions."
-            )
-
-        # Document not encrypted
-        if "not encrypted" in stderr_lower or "not encrypted" in stdout_lower:
-            raise click.ClickException(
-                "This document is not encrypted. Permissions can only be set on encrypted PDFs. "
-                f"First encrypt the PDF using: pdf-forms encrypt {pdf_path} -opw <password>"
-            )
-
-        # PDF processing errors
-        if "required entry" in stderr_lower or "dict=" in stderr_lower:
-            raise click.ClickException(
-                f"pdfcpu could not process this PDF: {result.stderr.strip()}\n\n"
-                "This error often occurs when the PDF has malformed form fields or is corrupted."
-            ) from None
-
-        # Check for other errors
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Failed to set permissions"
-            if "command not found" in error_msg.lower() or "not recognized" in error_msg.lower():
-                raise click.ClickException(
-                    f"pdfcpu not found at '{pdfcpu_path}'. "
-                    "Please install pdfcpu or provide the correct path with --pdfcpu-path"
-                ) from None
-            raise click.ClickException(f"Failed to set permissions: {error_msg}") from None
-
-        # Success
         click.echo(f"✓ Permissions updated: {pdf_path}")
 
-        # Show what was set
         if custom_bits:
             click.echo(f"  Custom bits: {custom_bits}")
         elif permissions:
             click.echo(f"  Preset: {permissions}")
         else:
-            # Show which individual flags were set
             active = []
             if print_perm:
                 active.append("print")
@@ -321,17 +195,32 @@ def set_permissions_command(
             else:
                 click.echo("  Permissions: none (most restrictive)")
 
-        # Print any warnings/info from pdfcpu
-        if result.stderr and "writing" not in result.stderr.lower():
-            click.echo(result.stderr, err=True)
+    except PDFFormError as e:
+        error_msg = str(e).lower()
 
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else "Failed to set permissions"
-        raise click.ClickException(f"Failed to set permissions: {error_msg}") from e
-    except FileNotFoundError as e:
-        raise click.ClickException(
-            f"pdfcpu not found at '{pdfcpu_path}'. "
-            "Please install pdfcpu or provide the correct path with --pdfcpu-path"
-        ) from e
+        if "pdfcpu binary not found" in error_msg:
+            raise click.ClickException(
+                f"pdfcpu not found at '{pdfcpu_path}'. "
+                "Please install pdfcpu or provide the correct path with --pdfcpu-path"
+            ) from e
+
+        if "incorrect owner password" in error_msg:
+            raise click.ClickException(
+                "Incorrect owner password. The owner password is required to modify permissions."
+            ) from e
+
+        if "not encrypted" in error_msg:
+            raise click.ClickException(
+                "This document is not encrypted. Permissions can only be set on encrypted PDFs. "
+                f"First encrypt the PDF using: pdf-forms encrypt {pdf_path} -opw <password>"
+            ) from e
+
+        if "required entry" in error_msg or "dict=" in error_msg:
+            raise click.ClickException(
+                f"pdfcpu could not process this PDF: {e}\n\n"
+                "This error often occurs when the PDF has malformed form fields or is corrupted."
+            ) from None
+
+        raise click.ClickException(f"Failed to set permissions: {e}") from e
     except Exception as e:
         raise click.ClickException(f"Unexpected error: {e}") from e

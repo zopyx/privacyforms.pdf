@@ -648,6 +648,35 @@ class TestValidateFormData:
             errors = extractor.validate_form_data(test_file, form_data, allow_extra_fields=True)
             assert errors == []
 
+    def test_validate_checkbox_type_error_with_allow_extra_fields(self, tmp_path: Path) -> None:
+        """Test checkbox type validation is not bypassed when allow_extra_fields=True."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        mock_field = PDFField(
+            name="Agree",
+            id="1",
+            type="checkbox",
+            value=False,
+            pages=[1],
+            locked=False,
+        )
+        mock_form_data = PDFFormData(
+            source=test_file,
+            pdf_version="v1.0",
+            has_form=True,
+            fields=[mock_field],
+            raw_data={},
+        )
+
+        form_data = {"Agree": "yes"}  # String instead of bool
+
+        with patch.object(extractor, "extract", return_value=mock_form_data):
+            errors = extractor.validate_form_data(test_file, form_data, allow_extra_fields=True)
+            assert len(errors) == 1
+            assert "boolean" in errors[0].lower()
+
 
 class TestFillForm:
     """Tests for fill_form method."""
@@ -1515,13 +1544,13 @@ class TestGetFieldTypeEdgeCases:
         """Test date field detection with /AA."""
         field = {"/FT": "/Tx", "/AA": {}}
         result = PDFFormExtractor._get_field_type(field)
-        assert result == "textfield"
+        assert result == "datefield"
 
     def test_date_field_with_dv(self) -> None:
         """Test date field detection with /DV."""
         field = {"/FT": "/Tx", "/DV": "default"}
         result = PDFFormExtractor._get_field_type(field)
-        assert result == "textfield"
+        assert result == "datefield"
 
     def test_default_fallback_textfield(self) -> None:
         """Test default fallback returns textfield for unknown types."""
@@ -1703,7 +1732,7 @@ class TestGetFieldPagesEdgeCases:
         extractor = PDFFormExtractor()
 
         mock_annot_ref = MagicMock()
-        mock_annot_ref.get_object.side_effect = Exception("Error reading annotation")
+        mock_annot_ref.get_object.side_effect = AttributeError("Error reading annotation")
 
         class MockPage(dict):
             def __init__(self):
@@ -1785,7 +1814,7 @@ class TestExtractGeometryEdgeCases:
         extractor = PDFFormExtractor()
 
         mock_annot_ref = MagicMock()
-        mock_annot_ref.get_object.side_effect = Exception("Error reading annotation")
+        mock_annot_ref.get_object.side_effect = AttributeError("Error reading annotation")
 
         class MockPage(dict):
             def __init__(self):
@@ -2378,7 +2407,7 @@ class TestExtractorCoverageHelpers:
             "/Rect": [10, 20, 30, 40],
         }
         bad_ref = MagicMock()
-        bad_ref.get_object.side_effect = Exception("broken")
+        bad_ref.get_object.side_effect = AttributeError("broken")
         ref1 = MagicMock()
         ref1.get_object.return_value = annot1
         ref2 = MagicMock()
@@ -2693,6 +2722,192 @@ class TestRowYProperty:
         data = geometry.model_dump()
         assert "row_y" in data
         assert data["row_y"] == 150.0
+
+
+class TestExtractorThinWrappers:
+    """Tests for thin extractor wrappers to satisfy coverage."""
+
+    def test_sort_fields_delegates_to_reader(self) -> None:
+        """Test _sort_fields delegates to FormReader."""
+        extractor = PDFFormExtractor()
+        field = PDFField(name="A", id="1", type="textfield", pages=[1])
+        with patch.object(extractor._reader, "sort_fields", return_value=[field]) as mock_sort:
+            result = extractor._sort_fields([field])
+            assert result == [field]
+            mock_sort.assert_called_once_with([field])
+
+    def test_get_widget_annotation_delegates(self) -> None:
+        """Test _get_widget_annotation static wrapper."""
+        ref = MagicMock()
+        ref.get_object.return_value = {"/Subtype": "/Widget", "/T": "Name"}
+        annotation, parent = PDFFormExtractor._get_widget_annotation(ref)
+        assert annotation["/T"] == "Name"
+        assert parent is annotation
+
+    def test_escape_pdf_text_delegates(self) -> None:
+        """Test _escape_pdf_text static wrapper."""
+        assert PDFFormExtractor._escape_pdf_text("(test)") == r"\(test\)"
+
+    def test_export_pdfcpu_form_data_delegates(self) -> None:
+        """Test _export_pdfcpu_form_data delegates to backend."""
+        extractor = PDFFormExtractor()
+        expected = {"forms": []}
+        with patch.object(
+            extractor._pdfcpu, "_export_form_data", return_value=expected
+        ) as mock_export:
+            result = extractor._export_pdfcpu_form_data(Path("x.pdf"), "/bin/pdfcpu")
+            assert result == expected
+            mock_export.assert_called_once_with(Path("x.pdf"), "/bin/pdfcpu")
+
+    def test_build_pdfcpu_field_index_delegates(self) -> None:
+        """Test _build_pdfcpu_field_index static wrapper."""
+        data = {"forms": []}
+        result = PDFFormExtractor._build_pdfcpu_field_index(data)
+        assert result == ({}, {})
+
+    def test_merge_pdfcpu_form_data_delegates(self) -> None:
+        """Test _merge_pdfcpu_form_data delegates to backend."""
+        extractor = PDFFormExtractor()
+        expected = {"forms": []}
+        with patch.object(
+            extractor._pdfcpu, "_merge_form_data", return_value=expected
+        ) as mock_merge:
+            result = extractor._merge_pdfcpu_form_data({"forms": []}, {"Name": "John"})
+            assert result == expected
+            mock_merge.assert_called_once_with({"forms": []}, {"Name": "John"})
+
+    def test_fill_form_with_pdfcpu_validation_passes(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu continues when validation passes."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=[]),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(extractor, "_export_pdfcpu_form_data", return_value={"forms": []}),
+            patch.object(extractor, "_run_pdfcpu_command"),
+        ):
+            output_file.touch()
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=True
+            )
+            assert result == output_file
+
+    def test_fill_form_with_pdfcpu_pdfcpu_fill_fallback(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu falls back when pdfcpu fill command fails."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        def side_effect(cmd: list[str]) -> None:
+            raise PDFFormError("dict=formFieldDict required entry=DA missing")
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=[]),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(extractor, "_export_pdfcpu_form_data", return_value={"forms": []}),
+            patch.object(extractor, "_run_pdfcpu_command", side_effect=side_effect),
+            patch.object(extractor, "fill_form", return_value=output_file) as mock_fill,
+        ):
+            result = extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+            assert result == output_file
+            assert extractor._last_fill_backend == "pypdf-fallback"
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+
+    def test_fill_form_with_pdfcpu_missing_output_file(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu raises when output file is not created."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        original_exists = Path.exists
+
+        def fake_exists(self: Path) -> bool:
+            if self == output_file:
+                return False
+            return original_exists(self)
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(extractor, "_export_pdfcpu_form_data", return_value={"forms": []}),
+            patch.object(extractor, "_run_pdfcpu_command"),
+            patch.object(Path, "exists", fake_exists),
+            pytest.raises(PDFFormError, match="pdfcpu did not create output file"),
+        ):
+            extractor.fill_form_with_pdfcpu(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+
+    def test_run_pdfcpu_command_error_branches(self) -> None:
+        """Test _run_pdfcpu_command covers all exception branches."""
+        extractor = PDFFormExtractor()
+
+        with (
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, ["pdfcpu"], stderr="err"),
+            ),
+            pytest.raises(PDFFormError, match="pdfcpu failed with exit code 1: err"),
+        ):
+            extractor._run_pdfcpu_command(["pdfcpu"])
+
+        with (
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.CalledProcessError(2, ["pdfcpu"], stderr=None),
+            ),
+            pytest.raises(PDFFormError, match="pdfcpu failed with exit code 2$"),
+        ):
+            extractor._run_pdfcpu_command(["pdfcpu"])
+
+        with (
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("pdfcpu", 30.0),
+            ),
+            pytest.raises(PDFFormError, match="pdfcpu timed out after 30.0 seconds"),
+        ):
+            extractor._run_pdfcpu_command(["pdfcpu"])
+
+        with (
+            patch(
+                "privacyforms_pdf.extractor.subprocess.run",
+                side_effect=FileNotFoundError("pdfcpu not found"),
+            ),
+            pytest.raises(PDFFormError, match="pdfcpu binary not found: pdfcpu"),
+        ):
+            extractor._run_pdfcpu_command(["pdfcpu"])
+
+    def test_fill_form_with_pdfcpu_reraises_non_fallback(self, tmp_path: Path) -> None:
+        """Test fill_form_with_pdfcpu re-raises non-fallback PDFFormError from pdfcpu fill."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        def side_effect(cmd: list[str]) -> None:
+            raise PDFFormError("pdfcpu fill failed for unknown reason")
+
+        with (
+            patch.object(extractor, "has_form", return_value=True),
+            patch.object(extractor, "validate_form_data", return_value=[]),
+            patch("privacyforms_pdf.extractor.shutil.which", return_value="/usr/bin/pdfcpu"),
+            patch.object(extractor, "_export_pdfcpu_form_data", return_value={"forms": []}),
+            patch.object(extractor, "_run_pdfcpu_command", side_effect=side_effect),
+            pytest.raises(PDFFormError, match="pdfcpu fill failed for unknown reason"),
+        ):
+            extractor.fill_form_with_pdfcpu(test_file, {"Name": "John"}, output_file, validate=True)
 
 
 class TestComputeAndSetRowClusters:

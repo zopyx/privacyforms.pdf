@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from privacyforms_pdf.cli import main
+from privacyforms_pdf.security import PDFSecurityManager
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +22,7 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
@@ -34,7 +35,7 @@ class TestEncryptCommand:
         pdf_file.write_text("fake pdf content")
         output_file = tmp_path / "encrypted.pdf"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -48,7 +49,7 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -63,7 +64,7 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -100,7 +101,10 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run", side_effect=FileNotFoundError("pdfcpu not found")):
+        with patch(
+            "privacyforms_pdf.security.subprocess.run",
+            side_effect=FileNotFoundError("pdfcpu not found"),
+        ):
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
             assert "pdfcpu not found" in result.output.lower()
@@ -110,27 +114,26 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        from subprocess import CalledProcessError
-
-        with patch(
-            "subprocess.run",
-            side_effect=CalledProcessError(1, ["pdfcpu"], stderr="command not found"),
+        with (
+            patch("privacyforms_pdf.security.shutil.which", return_value="pdfcpu"),
+            patch("privacyforms_pdf.security.subprocess.run") as mock_run,
         ):
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stderr = "command not found"
+            mock_run.return_value.stdout = ""
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
-            assert "pdfcpu not found" in result.output.lower()
+            assert "command not found" in result.output.lower()
 
     def test_encrypt_pdfcpu_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test encryption handles generic pdfcpu error."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        from subprocess import CalledProcessError
-
-        with patch(
-            "subprocess.run",
-            side_effect=CalledProcessError(1, ["pdfcpu"], stderr="Invalid PDF"),
-        ):
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stderr = "Invalid PDF"
+            mock_run.return_value.stdout = ""
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
             assert "encryption failed" in result.output.lower()
@@ -140,7 +143,13 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch(
+                "privacyforms_pdf.security.shutil.which",
+                return_value="/custom/path/to/pdfcpu",
+            ),
+            patch("privacyforms_pdf.security.subprocess.run") as mock_run,
+        ):
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -165,7 +174,7 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -182,7 +191,7 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stderr = ""
             result = runner.invoke(
@@ -215,15 +224,26 @@ class TestEncryptCommand:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_text("fake pdf content")
 
-        from subprocess import CalledProcessError
-
-        with patch(
-            "subprocess.run",
-            side_effect=CalledProcessError(
-                1, ["pdfcpu"], stderr="dict=formFieldDict required entry=DA missing"
-            ),
-        ):
+        with patch("privacyforms_pdf.security.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stderr = "dict=formFieldDict required entry=DA missing"
+            mock_run.return_value.stdout = ""
             result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
             assert result.exit_code != 0
             assert "pdfcpu could not process" in result.output.lower()
             assert "malformed form fields" in result.output.lower()
+
+    def test_encrypt_unexpected_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test encrypt command catches unexpected non-PDFFormError exceptions."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_text("fake pdf content")
+
+        with patch.object(
+            PDFSecurityManager,
+            "encrypt",
+            side_effect=ValueError("something unexpected"),
+        ):
+            result = runner.invoke(main, ["encrypt", str(pdf_file), "-opw", "ownerpass"])
+            assert result.exit_code != 0
+            assert "unexpected error" in result.output.lower()
+            assert "something unexpected" in result.output.lower()

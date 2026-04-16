@@ -43,6 +43,30 @@ class TestListFieldsCommand:
             assert "Field Value" in result.output
             assert "Total fields: 1" in result.output
 
+    def test_list_fields_truncates_long_values(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test list-fields truncates very long names and values."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        long_name = "A" * 35
+        long_value = "B" * 25
+        mock_fields = [
+            PDFField(
+                name=long_name,
+                id="1",
+                type="textfield",
+                value=long_value,
+                pages=[1],
+            )
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file)])
+            assert result.exit_code == 0
+            assert "…" in result.output
+
     def test_list_fields_with_geometry(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test list-fields command shows geometry information."""
         test_file = tmp_path / "test.pdf"
