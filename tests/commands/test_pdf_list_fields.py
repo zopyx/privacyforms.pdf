@@ -350,3 +350,29 @@ class TestListFieldsCommand:
             assert result.exit_code == 0
             assert "Agree" in result.output
             assert "checkbox" in result.output
+
+    def test_list_fields_layout_truncates_long_text_values(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test list-fields --layout truncates long text values."""
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+
+        geometry = FieldGeometry(page=1, rect=(100.0, 500.0, 250.0, 530.0))
+        mock_fields = [
+            PDFField(
+                name="Comment",
+                id="1",
+                type="textfield",
+                value="A" * 25,
+                pages=[1],
+                geometry=geometry,
+            ),
+        ]
+
+        with patch(
+            "privacyforms_pdf.extractor.PDFFormExtractor.list_fields", return_value=mock_fields
+        ):
+            result = runner.invoke(main, ["list-fields", str(test_file), "--layout"])
+            assert result.exit_code == 0
+            assert "AAAAAAAAAAAAAAAAA..." in result.output

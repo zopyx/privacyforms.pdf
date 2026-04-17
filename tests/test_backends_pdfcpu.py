@@ -130,6 +130,17 @@ class TestPdfcpuBackendBuildFieldIndex:
         assert exact == {"1": ("textfield", {"id": "1"})}
         assert suffix == {}
 
+    def test_build_field_index_accepts_name_without_field_id(self) -> None:
+        """Test _build_field_index indexes fields that have a name but no id."""
+        backend = PdfcpuBackend()
+        entry = {"name": "form.section.Name"}
+        data = {"forms": [{"textfield": [entry]}]}
+
+        exact, suffix = backend._build_field_index(data)
+
+        assert exact == {"form.section.Name": ("textfield", entry)}
+        assert suffix == {"Name": ("textfield", entry)}
+
 
 class TestPdfcpuBackendMergeFormData:
     """Tests for PdfcpuBackend._merge_form_data."""

@@ -185,7 +185,7 @@ class TestFormFillerResolveRadioFieldState:
         }
 
         with patch.object(FormReader, "get_field_options", return_value=None):
-            result = FormFiller._resolve_radio_field_state(parent_annotation, "CustomState")
+            result = FormFiller._resolve_radio_field_state(parent_annotation, "//CustomState")
             assert result == "/CustomState"
 
     def test_resolve_radio_field_state_returns_off_when_no_match(self) -> None:
@@ -200,6 +200,36 @@ class TestFormFillerResolveRadioFieldState:
         with patch.object(FormReader, "get_field_options", return_value=None):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "Missing")
             assert result == "/Off"
+
+    def test_resolve_radio_field_state_continues_when_option_state_is_missing(self) -> None:
+        """Test option fallback continues when the matched kid has no on-state."""
+        missing_state_kid = MagicMock()
+        missing_state_kid.get_object.return_value = {"/AP": {"/N": {"/Off": None}}}
+        matching_state_kid = MagicMock()
+        matching_state_kid.get_object.return_value = {"/AP": {"/N": {"/Choice": None}}}
+
+        parent_annotation = {
+            "/Kids": [missing_state_kid, matching_state_kid],
+        }
+
+        with patch.object(FormReader, "get_field_options", return_value=["Choice", "Other"]):
+            result = FormFiller._resolve_radio_field_state(parent_annotation, "/Other")
+            assert result == "/Choice"
+
+    def test_resolve_radio_field_state_retries_duplicate_options(self) -> None:
+        """Test option fallback retries later duplicate options after an Off-only widget."""
+        first_kid = MagicMock()
+        first_kid.get_object.return_value = {"/AP": {"/N": {"/Off": None}}}
+        second_kid = MagicMock()
+        second_kid.get_object.return_value = {"/AP": {"/N": {"/MappedChoice": None}}}
+
+        parent_annotation = {
+            "/Kids": [first_kid, second_kid],
+        }
+
+        with patch.object(FormReader, "get_field_options", return_value=["Choice", "Choice"]):
+            result = FormFiller._resolve_radio_field_state(parent_annotation, "Choice")
+            assert result == "/MappedChoice"
 
 
 class TestFormFillerSyncRadioButtonStates:
@@ -373,6 +403,35 @@ class TestFormFillerSyncListboxSelectionIndexes:
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
             assert "/AP" in widget
             assert cast("DictionaryObject", widget["/AP"])["/N"] == mock_ref
+
+    def test_sync_listbox_reuses_existing_appearance_dict(self) -> None:
+        """Test _sync_listbox_selection_indexes reuses an existing /AP dictionary."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        appearance = DictionaryObject()
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Ch",
+            "/T": "Colors",
+            "/AP": appearance,
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        mock_ref = NameObject("/Ref")
+
+        with (
+            patch.object(FormReader, "get_field_type", return_value="listbox"),
+            patch.object(FormReader, "get_field_options", return_value=["Red", "Blue"]),
+            patch.object(filler, "_build_listbox_appearance_stream", return_value=mock_ref),
+        ):
+            filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
+            assert widget["/AP"] is appearance
+            assert appearance["/N"] == mock_ref
 
     def test_sync_listbox_skips_combobox_widgets(self) -> None:
         """Test _sync_listbox_selection_indexes skips combobox widgets (/Ch but not listbox)."""
