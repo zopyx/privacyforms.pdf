@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,45 +16,53 @@ from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
 try:
+    from .pdf_layout import _build_layout, _build_rows
     from .pdf_schema import (
         ChoiceOption,
         FieldFlags,
-        FieldLayout,
         PDFField,
         PDFFieldType,
         PDFRepresentation,
-        RowGroup,
     )
 except ImportError:
+    from pdf_layout import _build_layout, _build_rows  # type: ignore[import-not-found]
     from pdf_schema import (  # type: ignore[import-not-found]
         ChoiceOption,
         FieldFlags,
-        FieldLayout,
         PDFField,
         PDFFieldType,
         PDFRepresentation,
-        RowGroup,
     )
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+_MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+def _check_input_size(path: Path, max_size: int = _MAX_PDF_SIZE) -> None:
+    """Raise ValueError if *path* exists and exceeds *max_size* bytes."""
+    if not path.exists():
+        return
+    size = path.stat().st_size
+    if size > max_size:
+        raise ValueError(
+            f"Input file too large: {path.name} ({size} bytes). "
+            f"Maximum allowed is {max_size} bytes."
+        )
+
+
+def _safe_write_text(path: Path, content: str) -> None:
+    """Write text to *path*, refusing to overwrite via existing symlinks."""
+    if path.is_symlink():
+        raise click.ClickException(f"Refusing to write to symlink: {path}")
+    path.write_text(content, encoding="utf-8")
+
 
 # ---------------------------------------------------------------------------
 # Layout helpers
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class _RawFieldInfo:
-    """Temporary container for extracted field data before model construction."""
-
-    name: str
-    pdf_type: str  # /Tx, /Btn, /Sig, /Ch
-    flags: int | None
-    value: object = None
-    default_value: object = None
-    kids: ArrayObject | None = None
-    rect: list[float] | None = None
-    page_index: int = 0
-    opts: list[object] | None = None
-    max_length: int | None = None
 
 
 # PDF field flag bit masks (0-indexed bits matching PDF spec 1-indexed positions)
@@ -263,9 +270,6 @@ def _extract_choices_for_choice(field_dict: DictionaryObject) -> list[ChoiceOpti
 
 def _determine_button_type(field_flags: FieldFlags, num_kids: int) -> PDFFieldType:
     """Classify a /Btn field as checkbox or radiobuttongroup."""
-    if field_flags.pushbutton:
-        # Unsupported in our schema; treat as checkbox as a fallback
-        return "checkbox"
     if field_flags.radio or num_kids > 1:
         return "radiobuttongroup"
     return "checkbox"
@@ -287,41 +291,8 @@ def _determine_choice_type(field_flags: FieldFlags) -> PDFFieldType:
     return "listbox"
 
 
-def _bbox_for_kids(kids: ArrayObject) -> list[float] | None:
-    """Compute the bounding box that contains all kid widgets."""
-    rects: list[list[float]] = []
-    for kid in kids:
-        ko = kid.get_object() if hasattr(kid, "get_object") else kid
-        if isinstance(ko, DictionaryObject):
-            rect = ko.get("/Rect")
-            if rect and len(rect) == 4:
-                rects.append([float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3])])
-    if not rects:
-        return None
-    xs = [r[0] for r in rects] + [r[2] for r in rects]
-    ys = [r[1] for r in rects] + [r[3] for r in rects]
-    return [min(xs), min(ys), max(xs), max(ys)]
-
-
-def _build_layout(
-    page_index: int | None,
-    rect: list[float] | None,
-) -> FieldLayout | None:
-    """Build FieldLayout from raw rectangle."""
-    if rect is None or len(rect) != 4:
-        return None
-    x1, y1, x2, y2 = float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3])
-    return FieldLayout(
-        page=page_index,
-        x=int(min(x1, x2)),
-        y=int(min(y1, y2)),
-        width=int(abs(x2 - x1)),
-        height=int(abs(y2 - y1)),
-    )
-
-
 def _collect_annotation_info(
-    pdf_path: Path | str,
+    reader: PdfReader,
 ) -> tuple[
     dict[str, tuple[int, list[float] | None]], dict[tuple[int, int], tuple[int, list[float] | None]]
 ]:
@@ -330,10 +301,9 @@ def _collect_annotation_info(
     Returns:
         A tuple of (name_map, ref_map) where ref_map uses (idnum, generation) as key.
     """
-    reader = PdfReader(str(pdf_path))
     name_map: dict[str, tuple[int, list[float] | None]] = {}
     ref_map: dict[tuple[int, int], tuple[int, list[float] | None]] = {}
-    for page_idx, page in enumerate(reader.pages):
+    for page_idx, page in enumerate(getattr(reader, "pages", ())):
         annots = page.get("/Annots")
         if not annots:
             continue
@@ -344,14 +314,53 @@ def _collect_annotation_info(
             if ao.get("/Subtype") != "/Widget":
                 continue
             rect = ao.get("/Rect")
-            ref_key = (annot.idnum, annot.generation)
-            ref_map[ref_key] = (page_idx + 1, rect)
+            if hasattr(annot, "idnum") and hasattr(annot, "generation"):
+                ref_key = (annot.idnum, annot.generation)
+                ref_map[ref_key] = (page_idx + 1, rect)
             t = ao.get("/T")
             if t:
                 name = str(t)
                 if name not in name_map:
                     name_map[name] = (page_idx + 1, rect)
     return name_map, ref_map
+
+
+def _resolve_source(pdf_path: Path, source: str | None) -> str:
+    """Return the source identifier used in the parsed representation."""
+    return source or pdf_path.name
+
+
+def _resolve_kid_layout(
+    kids: ArrayObject,
+    ref_map: dict[tuple[int, int], tuple[int, list[float] | None]],
+) -> tuple[int | None, list[float] | None]:
+    """Resolve page index and combined widget rect from kid annotations."""
+    kid_rects: list[list[float]] = []
+    kid_pages: list[int] = []
+    for kid in kids:
+        if hasattr(kid, "idnum") and hasattr(kid, "generation"):
+            ref_key = (kid.idnum, kid.generation)
+            if ref_key in ref_map:
+                page_index, rect = ref_map[ref_key]
+                kid_pages.append(page_index)
+                if rect and len(rect) == 4:
+                    kid_rects.append([float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3])])
+                continue
+
+        ko = kid.get_object() if hasattr(kid, "get_object") else kid
+        if not isinstance(ko, DictionaryObject):
+            continue
+        rect = ko.get("/Rect")
+        if rect and len(rect) == 4:
+            kid_rects.append([float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3])])
+
+    page_index = kid_pages[0] if kid_pages else None
+    if not kid_rects:
+        return page_index, None
+
+    xs = [r[0] for r in kid_rects] + [r[2] for r in kid_rects]
+    ys = [r[1] for r in kid_rects] + [r[3] for r in kid_rects]
+    return page_index, [min(xs), min(ys), max(xs), max(ys)]
 
 
 def extract_pdf_form(pdf_filename: Path | str) -> PDFRepresentation:
@@ -380,17 +389,18 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
         PDFRepresentation model populated from the PDF.
     """
     pdf_path = Path(pdf_path)
+    _check_input_size(pdf_path)
     reader = PdfReader(str(pdf_path))
     fields = reader.get_fields()
-    annot_info, ref_map = _collect_annotation_info(pdf_path)
+    annot_info, ref_map = _collect_annotation_info(reader)
+    resolved_source = _resolve_source(pdf_path, source)
 
     pdf_fields: list[PDFField] = []
-    field_layouts: dict[str, FieldLayout] = {}
 
     if not fields:
-        return PDFRepresentation(source=source or str(pdf_path))
+        return PDFRepresentation(source=resolved_source)
 
-    for idx, (name, field_ref) in enumerate(fields.items()):
+    for name, field_ref in fields.items():
         field_dict = field_ref.get_object() if hasattr(field_ref, "get_object") else field_ref
         if not isinstance(field_dict, DictionaryObject):
             continue
@@ -411,6 +421,8 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
             stripped_value = _strip_pdf_string(raw_value)
             field_type = _determine_text_type(name, stripped_value, field_flags)
         elif pdf_type == "/Btn":
+            if field_flags.pushbutton:
+                continue
             field_type = _determine_button_type(field_flags, num_kids)
         elif pdf_type == "/Sig":
             field_type = "signature"
@@ -460,38 +472,7 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
         # Layout resolution
         page_index, rect = annot_info.get(name, (None, None))
         if (page_index is None or rect is None) and num_kids > 0:
-            kid_rects: list[list[float]] = []
-            kid_pages: list[int] = []
-            for kid in kids:
-                if hasattr(kid, "idnum") and hasattr(kid, "generation"):
-                    ref_key = (kid.idnum, kid.generation)
-                    if ref_key in ref_map:
-                        p_idx, k_rect = ref_map[ref_key]
-                        kid_pages.append(p_idx)
-                        if k_rect:
-                            kid_rects.append(
-                                [
-                                    float(k_rect[0]),
-                                    float(k_rect[1]),
-                                    float(k_rect[2]),
-                                    float(k_rect[3]),
-                                ]
-                            )
-                        continue
-                # Fallback for raw DictionaryObject kids
-                ko = kid.get_object() if hasattr(kid, "get_object") else kid
-                if isinstance(ko, DictionaryObject):
-                    k_rect = ko.get("/Rect")
-                    if k_rect and len(k_rect) == 4:
-                        kid_rects.append(
-                            [float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])]
-                        )
-            if kid_pages:
-                page_index = kid_pages[0]
-            if kid_rects:
-                xs = [r[0] for r in kid_rects] + [r[2] for r in kid_rects]
-                ys = [r[1] for r in kid_rects] + [r[3] for r in kid_rects]
-                rect = [min(xs), min(ys), max(xs), max(ys)]
+            page_index, rect = _resolve_kid_layout(kids, ref_map)
         layout = _build_layout(page_index, rect)
 
         # Max length
@@ -499,7 +480,7 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
         max_length = int(max_len) if max_len is not None else None
 
         # Generate a stable id
-        field_id = f"f-{idx}"
+        field_id = f"f-{len(pdf_fields)}"
 
         # Omit field_flags entirely when no flags are set
         effective_flags = field_flags if flags_int is not None else None
@@ -523,62 +504,15 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
             textarea_cols=None,
         )
         pdf_fields.append(pdf_field)
-        if layout is not None:
-            field_layouts[field_id] = layout
 
     # Row grouping heuristic: cluster by page and y-coordinate
     rows = _build_rows(pdf_fields)
 
     return PDFRepresentation(
-        source=source or str(pdf_path),
+        source=resolved_source,
         fields=pdf_fields,
         rows=rows,
     )
-
-
-def _get_layout_x(field: PDFField) -> int:
-    """Return the x coordinate of a field's layout, or 0 if unknown."""
-    return field.layout.x if field.layout is not None and field.layout.x is not None else 0
-
-
-def _build_rows(fields: Sequence[PDFField], y_tolerance: int = 15) -> list[RowGroup]:
-    """Group fields into visual rows based on layout proximity."""
-    # Group by page
-    page_fields: dict[int, list[PDFField]] = {}
-    for f in fields:
-        if f.layout is None or f.layout.page is None:
-            continue
-        page_fields.setdefault(f.layout.page, []).append(f)
-
-    rows: list[RowGroup] = []
-    for page_idx in sorted(page_fields.keys()):
-        pf = page_fields[page_idx]
-        # Sort by y descending (top of page first)
-        pf.sort(key=lambda f: -(f.layout.y if f.layout else 0))
-
-        current_row: list[PDFField] = []
-        current_y = 0
-        has_current = False
-        for f in pf:
-            fy = f.layout.y if f.layout is not None and f.layout.y is not None else 0
-            if not has_current:
-                current_row = [f]
-                current_y = fy
-                has_current = True
-                continue
-            if abs(fy - current_y) <= y_tolerance:
-                current_row.append(f)
-            else:
-                # Sort row by x ascending
-                current_row.sort(key=_get_layout_x)
-                rows.append(RowGroup(fields=current_row, page_index=page_idx))
-                current_row = [f]
-                current_y = fy
-        if current_row:
-            current_row.sort(key=_get_layout_x)
-            rows.append(RowGroup(fields=current_row, page_index=page_idx))
-
-    return rows
 
 
 def _print_rows(representation: PDFRepresentation, *, show_ids: bool = False) -> None:
@@ -595,20 +529,34 @@ def _print_rows(representation: PDFRepresentation, *, show_ids: bool = False) ->
 @click.argument("pdf_file", type=click.Path(exists=True, path_type=Path))
 @click.argument("output_json", required=False, type=click.Path(path_type=Path))
 @click.option(
+    "-o",
+    "--output",
+    "output",
+    type=click.Path(path_type=Path),
+    help="Output JSON file path (alternative to positional OUTPUT_JSON).",
+)
+@click.option(
     "--by-id",
     "by_id",
     is_flag=True,
     default=False,
     help="Display rows using field IDs instead of field names.",
 )
-def main(pdf_file: Path, output_json: Path | None, by_id: bool) -> None:
+def main(pdf_file: Path, output_json: Path | None, output: Path | None, by_id: bool) -> None:
     """Parse PDF_FILE into JSON and write it to OUTPUT_JSON (default: <pdf-stem>.json)."""
-    output_path = output_json if output_json is not None else pdf_file.with_suffix(".json")
+    if output is not None:
+        output_path = output
+    else:
+        output_path = output_json if output_json is not None else pdf_file.with_suffix(".json")
 
-    representation = extract_pdf_form(pdf_file)
+    try:
+        representation = extract_pdf_form(pdf_file)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
     json_text = representation.to_compact_json(indent=2)
 
-    output_path.write_text(json_text, encoding="utf-8")
+    _safe_write_text(output_path, json_text)
     click.echo(f"Written to {output_path}")
     _print_rows(representation, show_ids=by_id)
 

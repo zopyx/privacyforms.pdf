@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Literal
 
 from pydantic import (
@@ -127,6 +128,16 @@ class RowGroup(BaseModel):
         description="One-based index of the page where this row appears.",
     )
 
+    @field_validator("page_index")
+    @classmethod
+    def validate_page_index(cls, value: int) -> int:
+        """Require a positive page index."""
+        if value < 1:
+            raise ValueError("page_index must be at least 1")
+        if value > 100_000:
+            raise ValueError("page_index must not exceed 100000")
+        return value
+
     @model_serializer(mode="wrap")
     def serialize_compact(self, handler):
         """Serialize fields as IDs for a compact representation."""
@@ -163,6 +174,8 @@ class ChoiceOption(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("choice values must not be empty")
+        if len(normalized) > 4096:
+            raise ValueError("choice value exceeds maximum length of 4096 characters")
         return normalized
 
     @field_validator("text", "source_name")
@@ -171,6 +184,8 @@ class ChoiceOption(BaseModel):
         """Normalize blank optional strings to None."""
         if value is None:
             return None
+        if len(value) > 4096:
+            raise ValueError("field exceeds maximum length of 4096 characters")
         normalized = value.strip()
         return normalized or None
 
@@ -207,6 +222,8 @@ class FieldLayout(BaseModel):
         """Disallow negative layout values."""
         if value is not None and value < 0:
             raise ValueError("layout values must be non-negative")
+        if value is not None and value > 1_000_000:
+            raise ValueError("layout values must not exceed 1000000")
         return value
 
 
@@ -270,13 +287,26 @@ class PDFField(BaseModel):
         description="Number of columns for textarea fields.",
     )
 
-    @field_validator("name", "id")
+    @field_validator("name")
     @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        """Require non-empty field identifiers."""
+    def validate_name(cls, value: str) -> str:
+        """Require non-empty field name."""
         normalized = value.strip()
         if not normalized:
-            raise ValueError("field identifiers must not be empty")
+            raise ValueError("field name must not be empty")
+        if len(normalized) > 2048:
+            raise ValueError("field name exceeds maximum length of 2048 characters")
+        return normalized
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, value: str) -> str:
+        """Require non-empty field id."""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("field id must not be empty")
+        if len(normalized) > 512:
+            raise ValueError("field id exceeds maximum length of 512 characters")
         return normalized
 
     @field_validator("title", "format")
@@ -285,8 +315,20 @@ class PDFField(BaseModel):
         """Normalize blank optional strings to None."""
         if value is None:
             return None
+        if len(value) > 4096:
+            raise ValueError("field exceeds maximum length of 4096 characters")
         normalized = value.strip()
         return normalized or None
+
+    @field_validator("value", "default_value")
+    @classmethod
+    def validate_value_length(cls, value: str | bool | list[str] | None) -> str | bool | list[str] | None:
+        """Enforce maximum length on string and list values."""
+        if isinstance(value, str) and len(value) > 100_000:
+            raise ValueError("field value exceeds maximum length of 100000 characters")
+        if isinstance(value, list) and any(len(item) > 100_000 for item in value):
+            raise ValueError("list value item exceeds maximum length of 100000 characters")
+        return value
 
     @field_validator("max_length", "textarea_rows", "textarea_cols")
     @classmethod
@@ -294,6 +336,8 @@ class PDFField(BaseModel):
         """Require positive UI hint values when present."""
         if value is not None and value <= 0:
             raise ValueError("numeric field constraints must be positive")
+        if value is not None and value > 1_000_000:
+            raise ValueError("numeric field constraints must not exceed 1000000")
         return value
 
     @model_validator(mode="after")
@@ -313,32 +357,39 @@ class PDFField(BaseModel):
         ):
             raise ValueError(f"choices are not valid for {self.type}")
 
-        if self.type == "checkbox" and self.value is not None and not isinstance(self.value, bool):
-            raise ValueError("checkbox value must be bool or None")
+        self._validate_scalar_value(self.value, label="value")
+        self._validate_scalar_value(self.default_value, label="default_value")
+
+        return self
+
+    def _validate_scalar_value(
+        self, value: str | bool | list[str] | None, *, label: str
+    ) -> None:
+        """Enforce type-specific rules for value-bearing fields."""
+        if self.type == "checkbox" and value is not None and not isinstance(value, bool):
+            raise ValueError(f"checkbox {label} must be bool or None")
 
         if (
             self.type in {"textfield", "textarea", "datefield", "signature"}
-            and self.value is not None
-            and not isinstance(self.value, str)
+            and value is not None
+            and not isinstance(value, str)
         ):
-            raise ValueError(f"{self.type} value must be str or None")
+            raise ValueError(f"{self.type} {label} must be str or None")
 
         if (
             self.type in {"radiobuttongroup", "combobox"}
-            and self.value is not None
-            and not isinstance(self.value, str)
+            and value is not None
+            and not isinstance(value, str)
         ):
-            raise ValueError(f"{self.type} value must be str or None")
+            raise ValueError(f"{self.type} {label} must be str or None")
 
-        if self.type == "listbox" and isinstance(self.value, list):
+        if self.type == "listbox" and isinstance(value, list):
             multi_select = self.field_flags.multi_select if self.field_flags is not None else False
             if not multi_select:
-                raise ValueError("list-valued listbox value requires field_flags.multi_select")
+                raise ValueError(f"list-valued listbox {label} requires field_flags.multi_select")
 
-        if self.type != "listbox" and isinstance(self.value, list):
-            raise ValueError("list values are only valid for listbox")
-
-        return self
+        if self.type != "listbox" and isinstance(value, list):
+            raise ValueError(f"list values are only valid for listbox {label}")
 
 
 class PDFRepresentation(BaseModel):
@@ -370,6 +421,8 @@ class PDFRepresentation(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("spec_version must not be empty")
+        if len(normalized) > 32:
+            raise ValueError("spec_version exceeds maximum length of 32 characters")
         return normalized
 
     @field_validator("source")
@@ -378,6 +431,8 @@ class PDFRepresentation(BaseModel):
         """Normalize blank source strings to None."""
         if value is None:
             return None
+        if len(value) > 4096:
+            raise ValueError("source exceeds maximum length of 4096 characters")
         normalized = value.strip()
         return normalized or None
 
@@ -385,7 +440,8 @@ class PDFRepresentation(BaseModel):
     def validate_document(self) -> PDFRepresentation:
         """Enforce document-level constraints and resolve row field IDs."""
         field_ids = [field.id for field in self.fields]
-        duplicates = sorted({field_id for field_id in field_ids if field_ids.count(field_id) > 1})
+        id_counts = Counter(field_ids)
+        duplicates = sorted({field_id for field_id, count in id_counts.items() if count > 1})
         if duplicates:
             raise ValueError(f"field ids must be unique: {', '.join(duplicates)}")
 
