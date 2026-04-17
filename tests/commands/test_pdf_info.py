@@ -22,7 +22,7 @@ class TestInfoCommand:
         test_file = tmp_path / "test.pdf"
         test_file.touch()
 
-        with patch("privacyforms_pdf.extractor.PDFFormExtractor.has_form", return_value=True):
+        with patch("privacyforms_pdf.extractor.PDFFormService.has_form", return_value=True):
             result = runner.invoke(main, ["info", str(test_file)])
             assert result.exit_code == 0
             assert "contains a form" in result.output
@@ -32,7 +32,7 @@ class TestInfoCommand:
         test_file = tmp_path / "test.pdf"
         test_file.touch()
 
-        with patch("privacyforms_pdf.extractor.PDFFormExtractor.has_form", return_value=False):
+        with patch("privacyforms_pdf.extractor.PDFFormService.has_form", return_value=False):
             result = runner.invoke(main, ["info", str(test_file)])
             assert result.exit_code == 0
             assert "does not contain a form" in result.output
@@ -43,7 +43,7 @@ class TestInfoCommand:
         test_file.touch()
 
         with patch(
-            "privacyforms_pdf.extractor.PDFFormExtractor.has_form",
+            "privacyforms_pdf.extractor.PDFFormService.has_form",
             side_effect=PDFFormError("Error"),
         ):
             result = runner.invoke(main, ["info", str(test_file)])

@@ -49,10 +49,10 @@ extractor.fill_form(...)           # pypdf
 extractor.fill_form_with_pdfcpu(...)  # external binary
 ```
 
-**Recommendation:** Split pdfcpu-dependent features into an optional sub-package (`privacyforms_pdf.backends.pdfcpu`) or a separate CLI tool (`pdf-forms-ext`). Do not let external-binary dependencies leak into the core `PDFFormExtractor`.
+**Recommendation:** Split pdfcpu-dependent features into an optional sub-package (`privacyforms_pdf.backends.pdfcpu`) or a separate CLI tool (`pdf-forms-ext`). Do not let external-binary dependencies leak into the core `PDFFormService`.
 
 #### B. `extractor.py` Is a God Object
-At **1,821 lines**, `PDFFormExtractor` violates the Single Responsibility Principle. It now handles:
+At **1,821 lines**, `PDFFormService` violates the Single Responsibility Principle. It now handles:
 
 - Form extraction
 - Geometry calculation & row clustering
@@ -65,7 +65,7 @@ At **1,821 lines**, `PDFFormExtractor` violates the Single Responsibility Princi
 **Recommendation:** Decompose into focused collaborator classes:
 
 ```text
-PDFFormExtractor          → orchestrator
+PDFFormService          → orchestrator
   ├── FormReader          → extraction logic
   ├── FormFiller          → pypdf writing + widget sync
   ├── GeometryAnalyzer    → row clustering

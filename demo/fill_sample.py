@@ -10,7 +10,7 @@ from pathlib import Path
 # Add the package to path if running from source
 sys.path.insert(0, str(Path(__file__).parent))
 
-from privacyforms_pdf import PDFFormExtractor
+from privacyforms_pdf import PDFFormService
 from privacyforms_pdf.parser import parse_pdf
 
 
@@ -38,7 +38,7 @@ def main() -> int:
         return 1
 
     print(f"Step 1: Extracting fields from {pdf_path}...")
-    extractor = PDFFormExtractor()
+    extractor = PDFFormService()
 
     # Check if PDF has a form
     if not extractor.has_form(pdf_path):

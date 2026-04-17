@@ -90,7 +90,7 @@ Contains `FormFiller`, the low-level writer used for:
 
 ### `extractor.py`
 
-Contains `PDFFormExtractor`, the higher-level facade for read, validation, and fill workflows:
+Contains `PDFFormService`, the higher-level facade for read, validation, and fill workflows:
 
 - `extract()`
 - `extract_to_json()`
@@ -128,21 +128,21 @@ Function-based:
 
 Facade-based:
 
-- `PDFFormExtractor.extract(pdf_path, source=None)`
-- `PDFFormExtractor.extract_to_json(pdf_path, output_path, source=None)`
-- `PDFFormExtractor.list_fields(pdf_path)`
-- `PDFFormExtractor.get_field_by_id(pdf_path, field_id)`
-- `PDFFormExtractor.get_field_by_name(pdf_path, field_name)`
-- `PDFFormExtractor.get_field_value(pdf_path, field_name)`
+- `PDFFormService.extract(pdf_path, source=None)`
+- `PDFFormService.extract_to_json(pdf_path, output_path, source=None)`
+- `PDFFormService.list_fields(pdf_path)`
+- `PDFFormService.get_field_by_id(pdf_path, field_id)`
+- `PDFFormService.get_field_by_name(pdf_path, field_name)`
+- `PDFFormService.get_field_value(pdf_path, field_name)`
 
 ### Fill API
 
 The current fill/validation API is class-based:
 
-- `PDFFormExtractor.has_form(pdf_path)`
-- `PDFFormExtractor.validate_form_data(pdf_path, form_data, strict=False, allow_extra_fields=False, key_mode="name" | "id" | "auto")`
-- `PDFFormExtractor.fill_form(pdf_path, form_data, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
-- `PDFFormExtractor.fill_form_from_json(pdf_path, json_path, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
+- `PDFFormService.has_form(pdf_path)`
+- `PDFFormService.validate_form_data(pdf_path, form_data, strict=False, allow_extra_fields=False, key_mode="name" | "id" | "auto")`
+- `PDFFormService.fill_form(pdf_path, form_data, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
+- `PDFFormService.fill_form_from_json(pdf_path, json_path, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
 
 Preferred contract:
 
@@ -152,7 +152,7 @@ Preferred contract:
 
 ### Low-Level Writer
 
-`FormFiller.fill()` is available as a lower-level writer API, but the primary supported entry point for normal use is `PDFFormExtractor`.
+`FormFiller.fill()` is available as a lower-level writer API, but the primary supported entry point for normal use is `PDFFormService`.
 
 ## Data Model
 
@@ -222,7 +222,7 @@ Represents visually grouped fields on the same page row. In JSON form, rows seri
 
 ### Fill Flow
 
-1. `PDFFormExtractor.fill_form()` validates the PDF path
+1. `PDFFormService.fill_form()` validates the PDF path
 2. `has_form()` ensures the PDF contains form fields
 3. `validate_form_data()` optionally checks field names and checkbox value types
 4. `FormFiller.fill()` writes values via `PdfWriter`

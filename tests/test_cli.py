@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from privacyforms_pdf.cli import main
 from privacyforms_pdf.commands.utils import create_extractor
-from privacyforms_pdf.extractor import PDFFormExtractor
+from privacyforms_pdf.extractor import PDFFormService
 
 if TYPE_CHECKING:
     from click.testing import CliRunner
@@ -56,10 +56,10 @@ class TestCreateExtractor:
     def test_create_extractor_success(self) -> None:
         """Test create_extractor succeeds."""
         extractor = create_extractor()
-        assert isinstance(extractor, PDFFormExtractor)
+        assert isinstance(extractor, PDFFormService)
 
     def test_create_extractor_with_geometry(self) -> None:
         """Test create_extractor with geometry option."""
         extractor = create_extractor(extract_geometry=False)
-        assert isinstance(extractor, PDFFormExtractor)
+        assert isinstance(extractor, PDFFormService)
         assert extractor._extract_geometry is False

@@ -1,5 +1,5 @@
 classDiagram
-    class PDFFormExtractor {
+    class PDFFormService {
         -float _timeout_seconds
         -bool _extract_geometry
         +__init__(timeout_seconds, extract_geometry)
@@ -68,8 +68,8 @@ classDiagram
     class FieldNotFoundError
     class FormValidationError
 
-    PDFFormExtractor --> PDFFormData : creates
-    PDFFormExtractor --> PDFField : creates
+    PDFFormService --> PDFFormData : creates
+    PDFFormService --> PDFField : creates
     PDFFormData --> PDFField : contains
     PDFField --> FieldGeometry : optional
     PDFFormError <|-- PDFFormNotFoundError

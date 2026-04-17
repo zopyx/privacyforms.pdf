@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -425,7 +427,15 @@ class FormFiller:
                 self._sync_listbox_selection_indexes(writer, listbox_field_values)
 
         output_file = Path(output_path) if output_path else pdf_path
-        with open(output_file, "wb") as f:
-            writer.write(f)
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            dir=output_file.parent,
+            suffix=output_file.suffix,
+        ) as tmp:
+            writer.write(tmp)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+        os.replace(tmp.name, output_file)
 
         return output_file

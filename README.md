@@ -95,7 +95,7 @@ pdf-forms info form.pdf
 The package currently exposes two main API layers:
 
 - read/parse APIs via `parse_pdf()` and `extract_pdf_form()`
-- higher-level read/fill/validate APIs via `PDFFormExtractor`
+- higher-level read/fill/validate APIs via `PDFFormService`
 
 ### Parse A PDF Into `PDFRepresentation`
 
@@ -125,9 +125,9 @@ json_text = representation.to_compact_json()
 ### Fill And Validate Forms
 
 ```python
-from privacyforms_pdf import PDFFormExtractor
+from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormExtractor()
+extractor = PDFFormService()
 
 has_form = extractor.has_form("form.pdf")
 
@@ -146,18 +146,18 @@ else:
 You can also fill from a JSON file:
 
 ```python
-from privacyforms_pdf import PDFFormExtractor
+from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormExtractor()
+extractor = PDFFormService()
 extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf", key_mode="id")
 ```
 
 The class also exposes extractor-style read helpers:
 
 ```python
-from privacyforms_pdf import PDFFormExtractor
+from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormExtractor()
+extractor = PDFFormService()
 representation = extractor.extract("form.pdf")
 fields = extractor.list_fields("form.pdf")
 field = extractor.get_field_by_id("form.pdf", "f-0")
@@ -169,7 +169,7 @@ extractor.extract_to_json("form.pdf", "representation.json")
 
 Primary exports from `privacyforms_pdf`:
 
-- `PDFFormExtractor`
+- `PDFFormService`
 - `FormFiller`
 - `parse_pdf`
 - `extract_pdf_form`

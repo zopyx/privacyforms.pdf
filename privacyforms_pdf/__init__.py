@@ -6,6 +6,7 @@ from .extractor import (
     PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
+    PDFFormService,
 )
 from .filler import FormFiller
 from .parser import extract_pdf_form, parse_pdf
@@ -24,6 +25,7 @@ __version__ = "0.2.0"
 __all__ = [
     # Main orchestrator
     "PDFFormExtractor",
+    "PDFFormService",
     # Collaborator classes
     "FormFiller",
     # Canonical schema (new)

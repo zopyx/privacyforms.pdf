@@ -1,8 +1,9 @@
-"""PDF Form Extractor module using pypdf."""
+"""PDF Form Service module using pypdf."""
 
 from __future__ import annotations
 
 import logging
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -37,6 +38,7 @@ __all__ = [
     "PDFFormError",
     "PDFFormExtractor",
     "PDFFormNotFoundError",
+    "PDFFormService",
     "cluster_y_positions",
     "get_available_geometry_backends",
     "has_geometry_support",
@@ -45,16 +47,15 @@ __all__ = [
 ]
 
 
-class PDFFormExtractor:
-    """Extracts form information from PDF files using pypdf.
+class PDFFormService:
+    """High-level service for PDF form operations using pypdf.
 
-    This class provides methods to extract form data from PDF files.
-    It uses pypdf for all operations including form extraction and filling.
+    Provides methods to parse, validate, and fill PDF forms.
 
     Example:
-        >>> extractor = PDFFormExtractor()
-        >>> has_form = extractor.has_form("form.pdf")
-        >>> extractor.fill_form("form.pdf", {"Name": "John"}, "filled.pdf")
+        >>> service = PDFFormService()
+        >>> has_form = service.has_form("form.pdf")
+        >>> service.fill_form("form.pdf", {"Name": "John"}, "filled.pdf")
     """
 
     def __init__(
@@ -388,3 +389,27 @@ class PDFFormExtractor:
         return self._filler._build_listbox_appearance_stream(
             writer, annotation, parent_annotation, selected_index
         )
+
+
+class PDFFormExtractor(PDFFormService):
+    """Deprecated alias for PDFFormService.
+
+    .. deprecated::
+        Use :class:`PDFFormService` instead.
+    """
+
+    def __init__(
+        self,
+        timeout_seconds: float = 30.0,
+        extract_geometry: bool = True,
+    ) -> None:
+        """Initialize with a deprecation warning."""
+        warnings.warn(
+            (
+                "PDFFormExtractor is deprecated and will be removed in a future version. "
+                "Use PDFFormService instead."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(timeout_seconds=timeout_seconds, extract_geometry=extract_geometry)

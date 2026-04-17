@@ -17,7 +17,7 @@ privacyforms_pdf/
 ├── schema.py            # Canonical PDFRepresentation schema
 ├── schema_layout.py     # Layout and row grouping helpers
 ├── parser.py            # PDF form parser (parse_pdf, extract_pdf_form)
-├── extractor.py         # PDFFormExtractor class - core functionality
+├── extractor.py         # PDFFormService class - core functionality
 ├── filler.py            # FormFiller class - pypdf form filling
 ├── hooks.py             # Pluggy hook specifications
 ├── commands/            # Built-in CLI command plugins
@@ -31,7 +31,7 @@ privacyforms_pdf/
 
 ### Core Classes
 
-- **PDFFormExtractor**: Main high-level class for validation and filling
+- **PDFFormService**: Main high-level class for validation and filling
   - Uses pypdf for all PDF operations
   - Handles all PDF form field types (textfield, datefield, checkbox, radiobuttongroup, etc.)
   - Provides methods: `extract()`, `extract_to_json()`, `list_fields()`, `get_field_by_id()`, `get_field_by_name()`, `get_field_value()`, `has_form()`, `fill_form()`, `fill_form_from_json()`, `validate_form_data()`
@@ -123,7 +123,7 @@ make upload-test    # Upload to TestPyPI (with twine)
 tests/
 ├── __init__.py
 ├── conftest.py                    # pytest fixtures
-├── test_extractor.py              # Tests for PDFFormExtractor
+├── test_extractor.py              # Tests for PDFFormService
 ├── test_filler.py                 # Tests for FormFiller
 ├── test_specs.py                  # Tests for schema and parser
 ├── test_cli.py                    # Tests for CLI group
@@ -147,7 +147,7 @@ uv run pytest --cov --cov-report=term-missing
 uv run pytest tests/test_extractor.py -v
 
 # Run specific test
-uv run pytest tests/test_extractor.py::TestPDFFormExtractorInitialization -v
+uv run pytest tests/test_extractor.py::TestPDFFormServiceInitialization -v
 ```
 
 ### Mocking Strategy
@@ -210,7 +210,7 @@ import click
 from pypdf import PdfReader, PdfWriter
 
 # Local
-from .extractor import PDFFormExtractor
+from .extractor import PDFFormService
 ```
 
 ### Function Signatures
@@ -270,7 +270,7 @@ my_command = "privacyforms_pdf.commands.pdf_my_command"
 
 ### Add a New Extractor Method
 
-1. Add method to `PDFFormExtractor` in `extractor.py`
+1. Add method to `PDFFormService` in `extractor.py`
 2. Use `PdfReader`/`PdfWriter` for pypdf operations
 3. Handle errors appropriately
 4. Add corresponding tests in `tests/test_extractor.py`

@@ -4,12 +4,12 @@ sequenceDiagram
     participant Cl as Click CLI
     participant C as CLI Module
     participant Ex as create_extractor
-    participant E as PDFFormExtractor
+    participant E as PDFFormService
 
     U->>Cl: pdf-forms extract form.pdf -o out.json
     Cl->>C: extract(pdf_path, output, raw)
     C->>Ex: create_extractor()
-    Ex-->>C: PDFFormExtractor()
+    Ex-->>C: PDFFormService()
     C->>E: extract(pdf_path)
     E-->>C: PDFFormData
     C->>C: json.dump(form_data.to_dict(), f)

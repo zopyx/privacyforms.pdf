@@ -50,7 +50,7 @@ class TestMain:
 
         with (
             patch("demo.fill_sample.Path") as mock_path_cls,
-            patch("demo.fill_sample.PDFFormExtractor", return_value=extractor_mock),
+            patch("demo.fill_sample.PDFFormService", return_value=extractor_mock),
         ):
             mock_pdf = MagicMock()
             mock_pdf.exists.return_value = True
@@ -90,7 +90,7 @@ class TestMain:
 
         with (
             patch("demo.fill_sample.Path") as mock_path_cls,
-            patch("demo.fill_sample.PDFFormExtractor", return_value=extractor_mock),
+            patch("demo.fill_sample.PDFFormService", return_value=extractor_mock),
             patch("demo.fill_sample.parse_pdf", side_effect=parse_pdf_side_effect),
             patch("builtins.open", MagicMock()),
             patch("json.dump", side_effect=dump_side_effect),
@@ -121,7 +121,7 @@ class TestMain:
 
         with (
             patch("demo.fill_sample.Path") as mock_path_cls,
-            patch("demo.fill_sample.PDFFormExtractor", return_value=extractor_mock),
+            patch("demo.fill_sample.PDFFormService", return_value=extractor_mock),
             patch("demo.fill_sample.parse_pdf", return_value=representation_mock),
             patch("builtins.open", MagicMock()),
             patch("json.dump"),

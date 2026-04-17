@@ -12,8 +12,8 @@ from privacyforms_pdf.cli import main
 from privacyforms_pdf.extractor import (
     FormValidationError,
     PDFFormError,
-    PDFFormExtractor,
     PDFFormNotFoundError,
+    PDFFormService,
 )
 from privacyforms_pdf.parser import parse_pdf
 
@@ -37,9 +37,9 @@ class TestFillFormCommand:
         output_file = tmp_path / "output.pdf"
 
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=True),
-            patch.object(PDFFormExtractor, "validate_form_data", return_value=[]),
-            patch.object(PDFFormExtractor, "fill_form") as mock_fill,
+            patch.object(PDFFormService, "has_form", return_value=True),
+            patch.object(PDFFormService, "validate_form_data", return_value=[]),
+            patch.object(PDFFormService, "fill_form") as mock_fill,
         ):
             mock_fill.return_value = output_file
             result = runner.invoke(
@@ -57,7 +57,7 @@ class TestFillFormCommand:
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Unknown": "value"}')
 
-        with patch.object(PDFFormExtractor, "validate_form_data", return_value=["Field not found"]):
+        with patch.object(PDFFormService, "validate_form_data", return_value=["Field not found"]):
             result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
             assert result.exit_code != 0
 
@@ -70,8 +70,8 @@ class TestFillFormCommand:
         output_file = tmp_path / "output.pdf"
 
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=True),
-            patch.object(PDFFormExtractor, "fill_form") as mock_fill,
+            patch.object(PDFFormService, "has_form", return_value=True),
+            patch.object(PDFFormService, "fill_form") as mock_fill,
         ):
             mock_fill.return_value = output_file
             result = runner.invoke(
@@ -97,8 +97,8 @@ class TestFillFormCommand:
 
         err_msg = "PDF does not contain a form"
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=False),
-            patch.object(PDFFormExtractor, "fill_form", side_effect=PDFFormNotFoundError(err_msg)),
+            patch.object(PDFFormService, "has_form", return_value=False),
+            patch.object(PDFFormService, "fill_form", side_effect=PDFFormNotFoundError(err_msg)),
         ):
             result = runner.invoke(
                 main, ["fill-form", str(pdf_file), str(json_file), "--no-validate"]
@@ -125,9 +125,9 @@ class TestFillFormCommand:
         json_file.write_text('{"Name": "test"}')
 
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=True),
-            patch.object(PDFFormExtractor, "validate_form_data", return_value=[]),
-            patch.object(PDFFormExtractor, "fill_form") as mock_fill,
+            patch.object(PDFFormService, "has_form", return_value=True),
+            patch.object(PDFFormService, "validate_form_data", return_value=[]),
+            patch.object(PDFFormService, "fill_form") as mock_fill,
         ):
             mock_fill.return_value = pdf_file
             result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
@@ -142,7 +142,7 @@ class TestFillFormCommand:
         json_file.write_text('{"Name": "John"}')
 
         with patch.object(
-            PDFFormExtractor,
+            PDFFormService,
             "validate_form_data",
             return_value=["Required field not provided: 'Missing'"],
         ):
@@ -158,8 +158,8 @@ class TestFillFormCommand:
         json_file.write_text('{"Name": "test"}')
 
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=True),
-            patch.object(PDFFormExtractor, "fill_form", side_effect=PDFFormError("Error")),
+            patch.object(PDFFormService, "has_form", return_value=True),
+            patch.object(PDFFormService, "fill_form", side_effect=PDFFormError("Error")),
         ):
             result = runner.invoke(
                 main, ["fill-form", str(pdf_file), str(json_file), "--no-validate"]
@@ -175,7 +175,7 @@ class TestFillFormCommand:
         json_file.write_text('{"Agree": "not-a-boolean"}')
 
         with patch.object(
-            PDFFormExtractor,
+            PDFFormService,
             "validate_form_data",
             return_value=["Field 'Agree': checkbox value must be boolean, got str"],
         ):
@@ -192,9 +192,9 @@ class TestFillFormCommand:
         output_file = tmp_path / "output.pdf"
 
         with (
-            patch.object(PDFFormExtractor, "has_form", return_value=True),
-            patch.object(PDFFormExtractor, "validate_form_data", return_value=[]),
-            patch.object(PDFFormExtractor, "fill_form") as mock_fill,
+            patch.object(PDFFormService, "has_form", return_value=True),
+            patch.object(PDFFormService, "validate_form_data", return_value=[]),
+            patch.object(PDFFormService, "fill_form") as mock_fill,
         ):
             mock_fill.return_value = output_file
             result = runner.invoke(
@@ -231,7 +231,7 @@ class TestFillFormCommand:
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
-        with patch.object(PDFFormExtractor, "has_form", return_value=False):
+        with patch.object(PDFFormService, "has_form", return_value=False):
             result = runner.invoke(
                 main,
                 ["fill-form", str(pdf_file), str(json_file), "--no-validate"],
@@ -249,7 +249,7 @@ class TestFillFormCommand:
         json_file.write_text('{"Name": "test"}')
 
         with patch.object(
-            PDFFormExtractor,
+            PDFFormService,
             "fill_form",
             side_effect=FormValidationError("validation failed", ["bad field"]),
         ):
