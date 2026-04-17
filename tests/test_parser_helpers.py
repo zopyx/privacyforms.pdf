@@ -479,6 +479,13 @@ class TestIsDateField:
         """It detects date fields from value patterns when the name has no keywords."""
         assert _is_date_field("Name", "01/02/2024") is True
 
+    def test_date_by_phrase_in_name(self) -> None:
+        """It detects date fields from multi-word phrases in the name (line 107)."""
+        assert _is_date_field("Date of Birth", None) is True
+        assert _is_date_field("Start Date", None) is True
+        assert _is_date_field("End Date", None) is True
+        assert _is_date_field("Birth Date", None) is True
+
 
 class TestNormalizeValueExtra:
     """Additional tests for _normalize_value."""

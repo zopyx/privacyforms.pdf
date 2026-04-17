@@ -102,9 +102,6 @@ def _is_date_field(name: str, value: str | None) -> bool:
     lower_name = name.lower()
     if _DATE_KEYWORDS_RE.search(lower_name):
         return True
-    for phrase in ("start date", "end date", "date of birth", "birth date"):
-        if phrase in lower_name:
-            return True
     return bool(
         value
         and (

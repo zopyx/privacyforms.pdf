@@ -934,3 +934,145 @@ class TestFormFillerResolveListboxIndex:
         with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]):
             result = FormFiller._resolve_listbox_index(parent_annotation, "Blue")
             assert result == 1
+
+
+class TestFormFillerCoverageGaps:
+    """Tests targeting uncovered branches from 360° review fixes."""
+
+    def test_sync_radio_matches_by_qualified_name(self) -> None:
+        """Test _sync_radio_button_states matches via qualified_name (line 127)."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "RadioGroup",
+            "/AP": {"/N": {"/Yes": None}},
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "RadioGroup"
+
+        with (
+            patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"),
+            patch.object(filler, "_resolve_radio_field_state", return_value="/Yes"),
+        ):
+            filler._sync_radio_button_states(writer, {"RadioGroup": "/Yes"})
+            assert widget["/V"] == NameObject("/Yes")
+            assert widget["/AS"] == NameObject("/Yes")
+
+    def test_sync_listbox_matches_by_annotation_name(self) -> None:
+        """Test _sync_listbox_selection_indexes matches via annotation /T (line 183)."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Ch",
+            "/T": "Colors",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"):
+            filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
+            assert widget["/V"] == TextStringObject("Red")
+
+    def test_sync_listbox_matches_by_parent_name(self) -> None:
+        """Test _sync_listbox_selection_indexes matches via parent /T (line 185)."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        parent = {
+            "/Subtype": "/Widget",
+            "/FT": "/Ch",
+            "/T": "ParentList",
+        }
+        parent_ref = MagicMock()
+        parent_ref.get_object.return_value = parent
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/Parent": parent_ref,
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"):
+            filler._sync_listbox_selection_indexes(writer, {"ParentList": "Red"})
+            assert parent["/V"] == TextStringObject("Red")
+
+    def test_fill_skips_none_values(self, tmp_path: PathType) -> None:
+        """Test fill() skips None values without writing them (line 442)."""
+        filler = FormFiller()
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n")
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+
+        mock_writer = MagicMock()
+        mock_writer.pages = [MagicMock()]
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
+        ):
+            filler.fill(pdf_file, {"Name": "John", "Empty": None})
+            mock_writer.update_page_form_field_values.assert_called_once()
+            call_args = mock_writer.update_page_form_field_values.call_args
+            assert "Empty" not in call_args[1]
+
+    def test_fill_without_appearance_matches_by_annotation_name(self) -> None:
+        """Test _fill_form_fields_without_appearance matches via annotation /T (line 334)."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "FieldName",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        filler._fill_form_fields_without_appearance(writer, {"FieldName": "value"})
+        assert widget["/V"] == TextStringObject("value")
+
+    def test_fill_without_appearance_matches_by_parent_name(self) -> None:
+        """Test _fill_form_fields_without_appearance matches via parent /T (line 336)."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        parent = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "ParentField",
+        }
+        parent_ref = MagicMock()
+        parent_ref.get_object.return_value = parent
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/Parent": parent_ref,
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        filler._fill_form_fields_without_appearance(writer, {"ParentField": "value"})
+        assert parent["/V"] == TextStringObject("value")

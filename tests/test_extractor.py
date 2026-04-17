@@ -644,3 +644,85 @@ class TestBackwardsCompatibility:
 
     def test_geometry_helpers_export(self) -> None:
         """Test geometry backend helpers are exported."""
+
+
+class TestExtractorDelegation:
+    """Tests for PDFFormService methods that delegate to FormFiller."""
+
+    def test_fill_form_fields_without_appearance_delegates(self) -> None:
+        """Test _fill_form_fields_without_appearance delegates to filler."""
+        service = PDFFormService()
+        writer = MagicMock()
+        with patch.object(service._filler, "_fill_form_fields_without_appearance") as mock:
+            service._fill_form_fields_without_appearance(writer, {"Name": "x"})
+            mock.assert_called_once_with(writer, {"Name": "x"})
+
+    def test_get_field_by_name_from_writer_delegates(self) -> None:
+        """Test get_field_by_name_from_writer delegates to filler."""
+        service = PDFFormService()
+        writer = MagicMock()
+        with patch.object(
+            service._filler, "get_field_by_name_from_writer", return_value={"/T": "Name"}
+        ) as mock:
+            result = service.get_field_by_name_from_writer(writer, "Name")
+            mock.assert_called_once_with(writer, "Name")
+            assert result == {"/T": "Name"}
+
+    def test_get_widget_annotation_delegates(self) -> None:
+        """Test _get_widget_annotation delegates to FormFiller."""
+        ref = MagicMock()
+        ref.get_object.return_value = {"/Subtype": "/Widget"}
+        result = PDFFormService._get_widget_annotation(ref)
+        assert result == ({"/Subtype": "/Widget"}, {"/Subtype": "/Widget"})
+
+    def test_get_widget_on_state_delegates(self) -> None:
+        """Test _get_widget_on_state delegates to FormFiller."""
+        annotation = {"/AP": {"/N": {"/Yes": None}}}
+        result = PDFFormService._get_widget_on_state(annotation)
+        assert result == "/Yes"
+
+    def test_resolve_radio_field_state_delegates(self) -> None:
+        """Test _resolve_radio_field_state delegates to FormFiller."""
+        parent = {"/AP": {"/N": {"/Yes": None}}}
+        result = PDFFormService._resolve_radio_field_state(parent, "/Yes")
+        assert result in {"/Yes", "/Off"}
+
+    def test_sync_radio_button_states_delegates(self) -> None:
+        """Test _sync_radio_button_states delegates to filler."""
+        service = PDFFormService()
+        writer = MagicMock()
+        with patch.object(service._filler, "_sync_radio_button_states") as mock:
+            service._sync_radio_button_states(writer, {"Group": "/Yes"})
+            mock.assert_called_once_with(writer, {"Group": "/Yes"})
+
+    def test_resolve_listbox_index_delegates(self) -> None:
+        """Test _resolve_listbox_index delegates to FormFiller."""
+        parent = {"/Opt": ["Red", "Blue"]}
+        result = PDFFormService._resolve_listbox_index(parent, "Blue")
+        assert result == 1
+
+    def test_sync_listbox_selection_indexes_delegates(self) -> None:
+        """Test _sync_listbox_selection_indexes delegates to filler."""
+        service = PDFFormService()
+        writer = MagicMock()
+        with patch.object(service._filler, "_sync_listbox_selection_indexes") as mock:
+            service._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
+            mock.assert_called_once_with(writer, {"Colors": "Red"})
+
+    def test_escape_pdf_text_delegates(self) -> None:
+        """Test _escape_pdf_text delegates to FormFiller."""
+        result = PDFFormService._escape_pdf_text("hello")
+        assert result == "hello"
+
+    def test_build_listbox_appearance_stream_delegates(self) -> None:
+        """Test _build_listbox_appearance_stream delegates to filler."""
+        service = PDFFormService()
+        writer = MagicMock()
+        annotation = MagicMock()
+        parent = MagicMock()
+        with patch.object(
+            service._filler, "_build_listbox_appearance_stream", return_value="stream"
+        ) as mock:
+            result = service._build_listbox_appearance_stream(writer, annotation, parent, 0)
+            mock.assert_called_once_with(writer, annotation, parent, 0)
+            assert result == "stream"
