@@ -344,7 +344,11 @@ class PDFFormService:
         writer: PdfWriter,
         field_values: dict[str, str],
     ) -> None:
-        """Fallback form fill that skips appearance-stream generation."""
+        """Fallback form fill that skips appearance-stream generation.
+
+        Delegates to
+        :meth:`~privacyforms_pdf.filler.FormFiller._fill_form_fields_without_appearance`.
+        """
         self._filler._fill_form_fields_without_appearance(writer, field_values)
 
     def get_field_by_name_from_writer(
@@ -352,19 +356,41 @@ class PDFFormService:
         writer: PdfWriter,
         field_name: str,
     ) -> dict[str, Any] | None:
-        """Find a field annotation by name in writer pages."""
+        """Find a field annotation by name in writer pages.
+
+        Searches all pages of the given *writer* for a widget whose qualified
+        name, annotation name, or parent name matches *field_name*.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller.get_field_by_name_from_writer`.
+        """
         return self._filler.get_field_by_name_from_writer(writer, field_name)
 
     @staticmethod
     def _get_widget_annotation(
         annotation_ref: Any,
     ) -> tuple[Any, Any]:
-        """Resolve widget and parent annotations."""
+        """Resolve widget and parent annotations.
+
+        PDF form fields are often split into a "parent" field dictionary (which
+        holds the field type, value, and options) and one or more "widget"
+        annotations (which hold the visual representation). This helper resolves
+        an indirect reference to the widget dictionary and then returns both the
+        widget and its parent.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._get_widget_annotation`.
+        """
         return FormFiller._get_widget_annotation(annotation_ref)
 
     @staticmethod
     def _get_widget_on_state(annotation: dict[str, Any]) -> str | None:
-        """Return the non-Off appearance state for a widget, if any."""
+        """Return the non-Off appearance state for a widget, if any.
+
+        Looks inside the widget's /AP (appearance dictionary) → /N (normal
+        appearance) for state names and returns the first one that is not
+        ``/Off``.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._get_widget_on_state`.
+        """
         return FormFiller._get_widget_on_state(annotation)
 
     @classmethod
@@ -373,7 +399,14 @@ class PDFFormService:
         parent_annotation: dict[str, Any],
         value: str,
     ) -> str:
-        """Resolve the selected on-state name for a radio group."""
+        """Resolve the selected on-state name for a radio group.
+
+        Maps the logical value (e.g. "Option1") to the exact NameObject state
+        string stored in the widget's appearance dictionary. This is necessary
+        because different PDF generators use different on-state names.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._resolve_radio_field_state`.
+        """
         return FormFiller._resolve_radio_field_state(parent_annotation, value)
 
     def _sync_radio_button_states(
@@ -381,12 +414,25 @@ class PDFFormService:
         writer: PdfWriter,
         field_values: dict[str, str],
     ) -> None:
-        """Update radio widget appearances to match the selected option."""
+        """Update radio widget appearances to match the selected option.
+
+        Iterates over all pages in *writer*, finds radio-button widgets, and
+        sets their ``/AS`` (appearance state) and ``/V`` (value) entries so that
+        the checked button matches the filled data.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._sync_radio_button_states`.
+        """
         self._filler._sync_radio_button_states(writer, field_values)
 
     @staticmethod
     def _resolve_listbox_index(parent_annotation: dict[str, Any], value: str) -> int | None:
-        """Resolve the selected index for a listbox value."""
+        """Resolve the selected index for a listbox value.
+
+        Matches *value* against the ``/Opt`` array of the listbox field and
+        returns the zero-based index of the match, or ``None`` if not found.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._resolve_listbox_index`.
+        """
         return FormFiller._resolve_listbox_index(parent_annotation, value)
 
     def _sync_listbox_selection_indexes(
@@ -394,12 +440,25 @@ class PDFFormService:
         writer: PdfWriter,
         field_values: dict[str, str],
     ) -> None:
-        """Update listbox values and selection indexes for viewer highlighting."""
+        """Update listbox values and selection indexes for viewer highlighting.
+
+        Sets ``/V`` (value), ``/I`` (selected indexes), ``/TI`` (top index), and
+        builds a custom appearance stream so that the highlighted row is visible
+        in PDF viewers.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._sync_listbox_selection_indexes`.
+        """
         self._filler._sync_listbox_selection_indexes(writer, field_values)
 
     @staticmethod
     def _escape_pdf_text(value: str) -> str:
-        """Escape text for use in a PDF string literal."""
+        r"""Escape text for use in a PDF string literal.
+
+        In PDF content streams parentheses delimit text strings, so ``(``, ``)``
+        and ``\`` must be backslash-escaped.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._escape_pdf_text`.
+        """
         return FormFiller._escape_pdf_text(value)
 
     def _build_listbox_appearance_stream(
@@ -409,7 +468,14 @@ class PDFFormService:
         parent_annotation: dict[str, Any],
         selected_index: int | None,
     ) -> Any | None:
-        """Build a listbox appearance stream with highlighted selection."""
+        """Build a listbox appearance stream with highlighted selection.
+
+        Constructs a raw PDF content stream that renders the listbox options,
+        drawing a light-blue highlight rectangle behind the selected item so
+        that viewers display the filled choice correctly.
+
+        Delegates to :meth:`~privacyforms_pdf.filler.FormFiller._build_listbox_appearance_stream`.
+        """
         return self._filler._build_listbox_appearance_stream(
             writer, annotation, parent_annotation, selected_index
         )

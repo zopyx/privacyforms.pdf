@@ -94,11 +94,27 @@ def _parse_field_flags(raw: int | None) -> FieldFlags:
     )
 
 
+# Common English keywords that indicate a field stores a date.
+# This is a heuristic because PDF text fields do not declare a date subtype;
+# authors typically encode intent in the field name.
 _DATE_KEYWORDS_RE = re.compile(r"\b(date|dob|birth|hired)\b", re.IGNORECASE)
 
 
 def _is_date_field(name: str, value: str | None) -> bool:
-    """Heuristic to detect date fields from name and value patterns."""
+    """Heuristic to detect date fields from name and value patterns.
+
+    PDF does not have a dedicated "date" field type; dates are stored in
+    standard text fields (/Tx). We infer the intent from:
+
+    1. Field name: presence of keywords such as "date", "dob", "birth",
+       "hired" (case-insensitive).
+    2. Current value: common date formats (ISO 8601 yyyy-mm-dd or regional
+       d/m/yyyy, mm/dd/yy, etc.).
+
+    False positives are possible (e.g. a field named "candidate" containing
+    "01/01/2025"), but the heuristic errs on the side of labelling a text
+    field as datefield, which is harmless for downstream conversion.
+    """
     lower_name = name.lower()
     if _DATE_KEYWORDS_RE.search(lower_name):
         return True

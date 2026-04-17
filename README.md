@@ -1,8 +1,11 @@
 # privacyforms-pdf
 
 [![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/zopyx/privacyforms.pdf/branch/master/graph/badge.svg)](https://codecov.io/gh/zopyx/privacyforms.pdf)
+[![PyPI](https://img.shields.io/pypi/v/privacyforms.pdf)](https://pypi.org/project/privacyforms.pdf/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zopyx/privacyforms.pdf/blob/master/LICENSE)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
 
 Python library for parsing and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).
@@ -283,6 +286,41 @@ Notes:
 - `PDFFormNotFoundError`: raised when a PDF does not contain a form
 - `FormValidationError`: raised when fill-time validation fails
 - `FieldNotFoundError`: exported for compatibility and field lookup failures
+
+## Security
+
+- Symlinks are rejected for both reads and writes to prevent path-traversal issues
+- PDF files are validated via magic-byte header check (`%PDF`) before parsing
+- Input size limits guard against oversized PDFs (> 50 MB) and JSON (> 10 MB)
+- JSON depth limits prevent stack exhaustion from malicious payloads
+
+## Architecture
+
+- Clean separation of concerns: `schema` → `parser` → `filler` → `extractor` → `cli`
+- Canonical `PDFRepresentation` schema (Pydantic v2) is the single source of truth
+- CLI commands are loaded dynamically via `pluggy` entry points — easy to extend
+- Low-level PDF writer (`FormFiller`) is decoupled from the high-level service (`PDFFormService`)
+
+## API Design
+
+- Two complementary layers: function-based (`parse_pdf`, `extract_pdf_form`) and class-based (`PDFFormService`)
+- Field IDs are the canonical key format; field names remain supported for convenience
+- `key_mode="auto"` accepts mixed payloads of IDs and names
+- All public methods have complete type hints and Google-style docstrings
+
+## Functionality
+
+- Handles all common PDF form types: text, textarea, date, checkbox, radio, combo, listbox, signature
+- Radio button state resolution works across different PDF generators
+- Listbox filling includes custom appearance streams so selections are visible in viewers
+- Graceful fallback when pypdf's appearance-stream generation hits edge cases
+
+## Code Quality
+
+- **100% test coverage** (426 tests) with pytest and `pytest-cov`
+- **Ruff** enforces strict linting (E, W, F, I, N, D, UP, B, C4, SIM, TCH)
+- **ty** type checker runs in strict mode — complete type hints throughout
+- **Bandit** security scanner integrated; no high or medium severity issues
 
 ## Development
 

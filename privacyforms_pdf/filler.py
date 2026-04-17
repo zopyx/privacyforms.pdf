@@ -50,7 +50,12 @@ class FormFiller:
 
     @staticmethod
     def _get_widget_on_state(annotation: dict[str, Any]) -> str | None:
-        """Return the non-Off appearance state for a widget, if any."""
+        """Return the non-Off appearance state for a widget, if any.
+
+        PDF button widgets define their visual states in an Appearance dictionary
+        (/AP) with a Normal sub-dictionary (/N). Each key in /N is a state name
+        (e.g. "/Yes", "/Off"). We return the first state that is not "/Off".
+        """
         ap = annotation.get("/AP")
         if not ap or "/N" not in ap:
             return None
@@ -67,7 +72,19 @@ class FormFiller:
         parent_annotation: dict[str, Any],
         value: str,
     ) -> str:
-        """Resolve the selected on-state name for a radio group."""
+        """Resolve the selected on-state name for a radio group.
+
+        Radio buttons in PDF are tricky because the "on" state name stored in
+        the widget's /AP dictionary may differ from the value written to the
+        field's /V entry. We try three strategies:
+
+        1. Direct match: the desired value exactly matches a kid's on-state.
+        2. Index match: the desired value matches an entry in the /Opt array;
+           we map that index to the corresponding kid widget and use its on-state.
+        3. Normalized match: compare after stripping leading slashes.
+
+        If nothing matches we fall back to "/Off" (unchecked).
+        """
         normalized_value = value if value.startswith("/") else f"/{value}"
         kids = parent_annotation.get("/Kids", [])
 
@@ -103,7 +120,15 @@ class FormFiller:
         writer: PdfWriter,
         field_values: dict[str, str],
     ) -> None:
-        """Update radio widget appearances to match the selected option."""
+        """Update radio widget appearances to match the selected option.
+
+        PDF viewers render a radio button based on the widget's Appearance State
+        (/AS) entry. The field's value (/V) tells the viewer which option is
+        selected for the group, while each individual widget's /AS determines
+        whether that specific button appears checked (its on-state) or unchecked
+        (/Off). We must update both /V on the parent field and /AS on every
+        kid widget so that the visual state matches the filled data.
+        """
         for page in writer.pages:
             annotations = page.get("/Annots", [])
             if not annotations:
@@ -137,6 +162,8 @@ class FormFiller:
                     field_values[matched_field_name],
                 )
                 widget_state = self._get_widget_on_state(annotation)
+                # Only the widget whose on-state matches the selected value
+                # should show as checked; all others must be /Off.
                 state = selected_state if widget_state == selected_state else "/Off"
                 parent_annotation[NameObject("/V")] = NameObject(selected_state)
                 annotation[NameObject("/AS")] = NameObject(state)
@@ -157,7 +184,19 @@ class FormFiller:
         writer: PdfWriter,
         field_values: dict[str, str],
     ) -> None:
-        """Update listbox values and selection indexes for viewer highlighting."""
+        """Update listbox values and selection indexes for viewer highlighting.
+
+        In addition to setting the field value (/V), PDF viewers need:
+
+        - /I: an array of selected indexes so the viewer knows which rows are
+          highlighted (required for multi-select, useful for single-select).
+        - /TI: the top index (scroll position) so the selected item is visible.
+        - /AP /N: an appearance stream that renders the list with the current
+          selection visually indicated.
+
+        We update all of these so the filled listbox looks correct in common
+        viewers (Acrobat, Preview, Chrome PDF, etc.).
+        """
         for page in writer.pages:
             annotations = page.get("/Annots", [])
             if not annotations:
@@ -221,7 +260,27 @@ class FormFiller:
         parent_annotation: dict[str, Any],
         selected_index: int | None,
     ) -> Any | None:
-        """Build a listbox appearance stream with highlighted selection."""
+        """Build a listbox appearance stream with highlighted selection.
+
+        PDF appearance streams are self-contained content streams (similar to
+        mini page descriptions) that define how a form field looks. We build one
+        from scratch because pypdf does not generate listbox visuals.
+
+        Content-stream operators used (PDF spec reference):
+
+        - q / Q          : save / restore graphics state
+        - BMC / EMC      : begin / end marked-content sequence
+        - re             : rectangle (draw path)
+        - W              : set clipping path
+        - n              : end path without filling or stroking
+        - rg             : set RGB non-stroking colour (0-1 range)
+        - f              : fill path
+        - BT / ET        : begin / end text object
+        - Tf             : set text font and size
+        - Tm             : set text matrix (position)
+        - Tj             : show text
+        - g              : set grey non-stroking colour (1 = white, 0 = black)
+        """
         options = get_field_options(parent_annotation)
         if not options:
             return None
@@ -234,6 +293,8 @@ class FormFiller:
             else DictionaryObject()
         )
 
+        # Re-use the existing bounding box if available; otherwise use a
+        # sensible default so the listbox still renders.
         bbox = (
             normal_ap.get("/BBox")
             if normal_ap is not None and "/BBox" in normal_ap
@@ -246,42 +307,48 @@ class FormFiller:
         line_height = height / max(len(options), 1)
         font_size = max(8.0, min(12.0, line_height * 0.75))
 
+        # Try to inherit the font name from the existing appearance resources;
+        # fall back to a generic "/F0" which most PDF viewers substitute.
         font_name = "/F0"
         if "/Font" in resources and resources["/Font"]:
             fonts = cast("DictionaryObject", resources["/Font"])
             font_name = str(next(iter(fonts.keys())))
 
+        # --- Build the content stream line by line ---
         lines: list[str] = [
-            "q",
-            "/Tx BMC",
-            "q",
+            "q",                     # save graphics state
+            "/Tx BMC",               # marked-content tag for text field
+            "q",                     # nested save for clipping
+            # Clip to the interior of the bbox (1-pt inset)
             f"1 1 {max(width - 2, 1):.3f} {max(height - 2, 1):.3f} re",
-            "W",
-            "n",
+            "W",                     # use rectangle as clipping path
+            "n",                     # end path (no fill, no stroke)
         ]
         if selected_index is not None:
             highlight_y = height - (selected_index + 1) * line_height
             lines.extend(
                 [
+                    # Light-blue highlight colour (approximates Acrobat's default)
                     "0.600006 0.756866 0.854904 rg",
                     f"1 {highlight_y:.3f} {max(width - 2, 1):.3f} {line_height:.3f} re",
-                    "f",
+                    "f",                 # fill the highlight rectangle
                 ]
             )
 
         lines.extend(
             [
-                "BT",
-                f"{font_name} {font_size:.3f} Tf",
+                "BT",                    # begin text object
+                f"{font_name} {font_size:.3f} Tf",  # set font
             ]
         )
         for index, option in enumerate(options):
+            # White text on highlighted row, black text otherwise
             lines.append("1 g" if index == selected_index else "0 g")
             text_y = height - ((index + 1) * line_height) + ((line_height - font_size) / 2)
             escaped = self._escape_pdf_text(str(option))
-            lines.append(f"1 0 0 1 2 {text_y:.3f} Tm")
-            lines.append(f"({escaped}) Tj")
-        lines.extend(["ET", "Q", "EMC", "Q"])
+            lines.append(f"1 0 0 1 2 {text_y:.3f} Tm")  # position text cursor
+            lines.append(f"({escaped}) Tj")             # draw the option text
+        lines.extend(["ET", "Q", "EMC", "Q"])           # close all groups
 
         stream = StreamObject()
         stream[NameObject("/Type")] = NameObject("/XObject")
