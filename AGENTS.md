@@ -94,7 +94,7 @@ make test           # Run tests
 
 - **Typing**: All code must have complete type hints (`ty` is the configured checker)
 - **Linting**: Ruff with line length 100, Python 3.13 target
-- **Testing**: Minimum 90% coverage required (currently 99%)
+- **Testing**: Minimum 99% coverage required (currently 99%), ideally 100%
 - **Docstrings**: Google-style docstrings for all public APIs
 
 ### Makefile Commands
