@@ -965,10 +965,12 @@ class TestParsePdfMaxFields:
         from privacyforms_pdf.parser import _MAX_FIELDS
 
         fields = {
-            f"field_{i}": DictionaryObject({
-                NameObject("/T"): TextStringObject(f"field_{i}"),
-                NameObject("/FT"): NameObject("/Tx"),
-            })
+            f"field_{i}": DictionaryObject(
+                {
+                    NameObject("/T"): TextStringObject(f"field_{i}"),
+                    NameObject("/FT"): NameObject("/Tx"),
+                }
+            )
             for i in range(_MAX_FIELDS)
         }
         with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
