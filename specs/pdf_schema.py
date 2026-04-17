@@ -294,13 +294,16 @@ class PDFField(BaseModel):
         if (
             self.type in {"textfield", "textarea", "datefield", "signature"}
             and self.value is not None
+            and not isinstance(self.value, str)
         ):
-            if not isinstance(self.value, str):
-                raise ValueError(f"{self.type} value must be str or None")
+            raise ValueError(f"{self.type} value must be str or None")
 
-        if self.type in {"radiobuttongroup", "combobox"} and self.value is not None:
-            if not isinstance(self.value, str):
-                raise ValueError(f"{self.type} value must be str or None")
+        if (
+            self.type in {"radiobuttongroup", "combobox"}
+            and self.value is not None
+            and not isinstance(self.value, str)
+        ):
+            raise ValueError(f"{self.type} value must be str or None")
 
         if self.type == "listbox" and isinstance(self.value, list):
             multi_select = self.field_flags.multi_select if self.field_flags is not None else False
@@ -365,8 +368,9 @@ class PDFRepresentation(BaseModel):
         row_ids = {field.id for row in self.rows for field in row.fields}
         unknown_row_ids = sorted(row_ids - valid_ids)
         if unknown_row_ids:
+            missing_ids = ", ".join(unknown_row_ids)
             raise ValueError(
-                f"rows reference fields that are not present in fields: {', '.join(unknown_row_ids)}"
+                f"rows reference fields that are not present in fields: {missing_ids}"
             )
 
         return self
