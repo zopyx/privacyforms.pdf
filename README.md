@@ -1,309 +1,299 @@
 # privacyforms-pdf
 
-[![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/privacyforms.pdf/actions/workflows/ci.yml)
-[![Python 3.14+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
 
-Python library for extracting and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).
+Python library for parsing and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).
 
 ## Features
 
-- Extract form data from PDF files using pure Python (no external dependencies)
-- Fill PDF forms programmatically using pypdf
-- Extract field geometry (position and size) information
-- Command-line interface with multiple commands
-- Full type hints and comprehensive test coverage (99%)
-- Support for all form field types (text, date, checkbox, radio button groups, etc.)
+- Parse fillable PDFs into a canonical `PDFRepresentation` schema
+- Fill PDF forms from simple JSON key/value data
+- Extract layout hints and visual row groupings
+- Validate representation JSON against the schema
+- Verify sample data keys against parsed field IDs
+- Extend the CLI through `pluggy` command entry points
 
 ## Requirements
 
-- Python 3.14+
-- pypdf >= 5.0
+- Python `3.12+`
+- `pypdf >= 5`
 
 ## Installation
 
 ```bash
-# Clone the repository
 git clone <repo-url>
-cd privacyforms-pdf
-
-# Install with uv
+cd privacyforms.pdf
 uv sync
 ```
 
-## Quick Start
+## CLI Quick Start
 
-### Command Line Usage
+### Parse A PDF
 
 ```bash
-# Parse a fillable PDF into the canonical PDFRepresentation schema
 pdf-forms parse form.pdf -o representation.json
+```
 
-# Verify a JSON file against the PDFRepresentation schema
+This writes a compact `PDFRepresentation` JSON document.
+
+### Verify A Representation JSON File
+
+```bash
 pdf-forms verify-json representation.json
+```
 
-# Verify that data JSON keys match form field IDs
-pdf-forms verify-data --form-json representation.json --data-json data.json
+### Verify Sample Data Keys Against Parsed Field IDs
 
-# Fill a form from JSON (validates before filling)
+```bash
+pdf-forms verify-data --form-json representation.json --data-json sample-data.json
+```
+
+Important:
+
+- `verify-data` expects keys in `sample-data.json` to be field IDs such as `f-0`, `f-1`, ...
+- `fill-form` expects keys to be PDF field names, not field IDs
+
+### Fill A PDF Form
+
+```bash
 pdf-forms fill-form form.pdf data.json -o filled.pdf
-
-# Fill a form without validation
 pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
-
-# Fill a form in-place (modifies original)
-pdf-forms fill-form form.pdf data.json
-
-# Fill with strict mode (requires all form fields)
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
 ```
 
-#### JSON Format
-
-The `fill-form` command accepts a simple key:value JSON format where keys are field names and values are the values to fill:
+`fill-form` consumes a simple JSON object keyed by field names:
 
 ```json
 {
   "Candidate Name": "John Smith",
   "Position": "Software Engineer",
   "Start date": "2025-06-01",
-  "Full time": true,
-  "Diploma or GED": "Yes"
+  "Full time": true
 }
 ```
 
-### Python API
+### Check Whether A PDF Contains A Form
+
+```bash
+pdf-forms info form.pdf
+```
+
+## Python API
+
+The package currently exposes two main API layers:
+
+- read/parse APIs via `parse_pdf()` and `extract_pdf_form()`
+- fill/validate APIs via `PDFFormExtractor`
+
+### Parse A PDF Into `PDFRepresentation`
+
+```python
+from privacyforms_pdf import extract_pdf_form
+
+representation = extract_pdf_form("form.pdf")
+
+print(representation.spec_version)
+print(representation.source)
+print(len(representation.fields))
+print(len(representation.rows))
+
+for field in representation.fields:
+    print(field.id, field.name, field.type, field.value)
+```
+
+You can also call `parse_pdf()` directly:
+
+```python
+from privacyforms_pdf import parse_pdf
+
+representation = parse_pdf("form.pdf")
+json_text = representation.to_compact_json()
+```
+
+### Fill And Validate Forms
 
 ```python
 from privacyforms_pdf import PDFFormExtractor
 
-# Initialize the extractor
 extractor = PDFFormExtractor()
 
-# Extract form data
-form_data = extractor.extract("form.pdf")
-
-# Access form information
-print(f"PDF Version: {form_data.pdf_version}")
-print(f"Has Form: {form_data.has_form}")
-print(f"Total Fields: {len(form_data.fields)}")
-
-# Iterate over fields
-for field in form_data.fields:
-    print(f"{field.name}: {field.value}")
-
-# Get specific field value
-value = extractor.get_field_value("form.pdf", "Field Name")
-
-# Check if PDF has a form
 has_form = extractor.has_form("form.pdf")
 
-# Export to JSON file
-extractor.extract_to_json("form.pdf", "output.json")
-
-# Fill a form using simple key:value format
 form_data = {
     "Candidate Name": "John Smith",
-    "Position": "Software Engineer",
     "Full time": True,
-    "Start date": "2025-06-01"
 }
-extractor.fill_form("form.pdf", form_data, "filled.pdf")
 
-# Or fill from a JSON file
-extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
-
-# Validate data before filling (returns list of errors)
 errors = extractor.validate_form_data("form.pdf", form_data)
 if errors:
-    print("Validation errors:", errors)
+    print(errors)
+else:
+    extractor.fill_form("form.pdf", form_data, "filled.pdf")
 ```
 
-## API Reference
-
-### `PDFFormExtractor`
-
-The main class for extracting and filling PDF form data.
-
-#### Constructor
+You can also fill from a JSON file:
 
 ```python
-extractor = PDFFormExtractor(
-    timeout_seconds: float = 30.0,
-    extract_geometry: bool = True
-)
+from privacyforms_pdf import PDFFormExtractor
+
+extractor = PDFFormExtractor()
+extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
 ```
 
-- `timeout_seconds`: Timeout for operations (kept for API compatibility).
-- `extract_geometry`: Whether to extract field geometry information.
+## Public Objects
 
-#### Methods
+Primary exports from `privacyforms_pdf`:
 
-- `has_form(pdf_path: str | Path) -> bool`: Check if a PDF contains a form.
-- `extract(pdf_path: str | Path) -> PDFFormData`: Extract form data from a PDF.
-- `extract_to_json(pdf_path: str | Path, output_path: str | Path) -> None`: Export form data to a JSON file.
-- `list_fields(pdf_path: str | Path) -> list[PDFField]`: List all form fields in a PDF.
-- `get_field_value(pdf_path: str | Path, field_name: str) -> str | bool | None`: Get the value of a specific form field.
-- `get_field_by_id(pdf_path: str | Path, field_id: str) -> PDFField | None`: Get a form field by its ID.
-- `get_field_by_name(pdf_path: str | Path, field_name: str) -> PDFField | None`: Get a form field by its name.
-- `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
-- `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data using pypdf.
-- `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file using pypdf.
+- `PDFFormExtractor`
+- `FormFiller`
+- `parse_pdf`
+- `extract_pdf_form`
+- `PDFRepresentation`
+- `PDFField`
+- `FieldFlags`
+- `FieldLayout`
+- `ChoiceOption`
+- `RowGroup`
+- `PDFFormError`
+- `PDFFormNotFoundError`
+- `FormValidationError`
+- `FieldNotFoundError`
 
-### Data Classes
+## `PDFRepresentation` Schema
 
-#### `PDFFormData`
+Top-level fields:
 
-Represents extracted PDF form data.
+- `spec_version: str`
+- `source: str | None`
+- `fields: list[PDFField]`
+- `rows: list[RowGroup]`
 
-- `source: Path`: Path to the source PDF file.
-- `pdf_version: str`: Version of the PDF.
-- `has_form: bool`: Whether the PDF contains a form.
-- `fields: list[PDFField]`: List of form fields.
-- `raw_data: dict[str, Any]`: The raw data from pypdf.
+### `PDFField`
 
-#### `PDFField`
+Main fields:
 
-Represents a single form field.
+- `name: str`
+- `title: str | None`
+- `id: str`
+- `type: PDFFieldType`
+- `field_flags: FieldFlags | None`
+- `layout: FieldLayout | None`
+- `default_value: str | bool | list[str] | None`
+- `value: str | bool | list[str] | None`
+- `choices: list[ChoiceOption]`
+- `format: str | None`
+- `max_length: int | None`
+- `textarea_rows: int | None`
+- `textarea_cols: int | None`
 
-- `name: str`: The name of the field.
-- `id: str`: The unique identifier of the field.
-- `field_type: str`: The type of the form field (e.g., 'textfield', 'checkbox').
-- `value: str | bool`: The current value of the field.
-- `pages: list[int]`: List of pages where this field appears.
-- `locked: bool`: Whether the field is locked.
-- `geometry: FieldGeometry | None`: Optional geometry information (position and size).
-- `format: str | None`: Date format for datefield types.
-- `options: list[str]`: Available options for radiobuttongroup, combobox, listbox types.
+Supported field types:
 
-#### `FieldGeometry`
+- `textfield`
+- `textarea`
+- `datefield`
+- `checkbox`
+- `radiobuttongroup`
+- `combobox`
+- `listbox`
+- `signature`
 
-Represents the geometry (position and size) of a form field.
+### `FieldLayout`
 
-- `page: int`: 1-based page number where field appears.
-- `rect: tuple[float, float, float, float]`: Bounding box as (x1, y1, x2, y2) in PDF points.
-- `x: float`: Left coordinate.
-- `y: float`: Bottom coordinate (PDF coordinate system).
-- `width: float`: Field width in points.
-- `height: float`: Field height in points.
-- `normalized_y: float`: Y position quantized to 15-point buckets for row grouping (legacy method).
-- `row_y: float`: Y position of the row cluster center computed using adaptive clustering (recommended for row grouping).
-- `units: str`: Unit of measurement (always "pt" for points).
+Layout hints are stored in integer PDF coordinates:
 
-### JSON Export Format
+- `page: int | None`
+- `x: int | None`
+- `y: int | None`
+- `width: int | None`
+- `height: int | None`
 
-When using `pdf-forms extract` or `extract_to_json()`, the output JSON has the following structure:
+### `RowGroup`
+
+Visual rows derived from layout analysis:
+
+- `fields: list[PDFField | str]`
+- `page_index: int`
+
+When serialized, row fields are emitted as field IDs.
+
+## JSON Shape
+
+Example parsed representation:
 
 ```json
 {
-  "source": "path/to/form.pdf",
-  "pdf_version": "1.7",
-  "has_form": true,
+  "source": "form.pdf",
   "fields": [
     {
-      "name": "Field Name",
-      "id": "1",
-      "field_type": "textfield",
-      "value": "Field Value",
-      "pages": [1],
-      "locked": false,
-      "geometry": {
+      "name": "Candidate Name",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
         "page": 1,
-        "rect": [53.0, 1077.0, 414.0, 1104.0],
-        "x": 53.0,
-        "y": 1077.0,
-        "width": 361.0,
-        "height": 27.0,
-        "normalized_y": 1075.0,
-        "row_y": 1075.0,
-        "units": "pt"
-      },
-      "format": null,
-      "options": []
+        "x": 53,
+        "y": 1077,
+        "width": 361,
+        "height": 27
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": ["f-0"],
+      "page_index": 1
     }
   ]
 }
 ```
 
-**Field Types:**
-- `textfield`: Text input fields
-- `datefield`: Date input fields (may include `format` attribute)
-- `checkbox`: Boolean/checkbox fields (value is `true` or `false`)
-- `radiobuttongroup`: Radio button groups (may include `options` array)
-- `combobox`: Dropdown/combo boxes (may include `options` array)
-- `listbox`: List selection boxes (may include `options` array)
-- `signature`: Signature fields
+Notes:
 
-**Geometry:**
-The `geometry` object contains the field's position and size in PDF points (1/72 inch):
-- `rect`: Array of `[x0, y0, x1, y1]` coordinates
-- `x`, `y`: Bottom-left corner position
-- `width`, `height`: Field dimensions
-- `normalized_y`: Y position quantized to 15-point buckets (fields within ±15 points share the same value)
-- `row_y`: Y position of the row cluster center using adaptive clustering analysis (recommended for row grouping - groups fields more intelligently based on the distribution of all positions)
-- Note: PDF coordinates have origin (0,0) at bottom-left of the page
-- `width: float`: Field width in points.
-- `height: float`: Field height in points.
+- omitted fields are intentionally excluded by compact serialization
+- `field_flags` only serializes flags set to `true`
+- `rows` reference fields by ID in JSON
 
-### Exceptions
+## Exceptions
 
-- `PDFFormError`: Base exception for PDF form related errors.
-- `PDFFormNotFoundError`: Raised when the PDF does not contain any forms.
-- `FormValidationError`: Raised when form data validation fails.
-- `FieldNotFoundError`: Raised when a field is not found in the form.
-
-### Utility Functions
-
-- `get_available_geometry_backends() -> list[str]`: Return list of available geometry backends (always `["pypdf"]`).
-- `has_geometry_support() -> bool`: Check if geometry extraction is supported (always `True`).
+- `PDFFormError`: base exception for form-related failures
+- `PDFFormNotFoundError`: raised when a PDF does not contain a form
+- `FormValidationError`: raised when fill-time validation fails
+- `FieldNotFoundError`: exported for compatibility and field lookup failures
 
 ## Development
 
-### Running Tests
+### Quality Checks
 
 ```bash
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov
-
-# Run linting
-uv run ruff check .
-
-# Run type checking
-uv run ty check
+make check
+make test
+make test-cov
 ```
 
 ### Project Structure
 
-```
-privacyforms-pdf/
-├── privacyforms_pdf/       # Main package
-│   ├── __init__.py         # Package exports
-│   ├── schema.py           # Canonical PDFRepresentation schema
-│   ├── schema_layout.py    # Layout and row grouping helpers
-│   ├── parser.py           # PDF form parser
-│   ├── extractor.py        # PDFFormExtractor implementation
-│   ├── filler.py           # FormFiller implementation
-│   ├── security.py         # PDF encryption and permissions
-│   ├── commands/           # CLI command modules
-│   │   ├── pdf_fill_form.py
-│   │   ├── pdf_parse.py
-│   │   ├── pdf_verify_data.py
-│   │   ├── pdf_verify_json.py
-│   │   └── ...
-│   └── cli.py              # Command-line interface
-├── tests/                  # Test suite
-│   ├── test_extractor.py
-│   ├── test_filler.py
-│   ├── test_specs.py
-│   └── ...
-├── pyproject.toml          # Project configuration
-└── README.md               # This file
+```text
+privacyforms.pdf/
+├── privacyforms_pdf/
+│   ├── __init__.py
+│   ├── schema.py
+│   ├── schema_layout.py
+│   ├── parser.py
+│   ├── extractor.py
+│   ├── filler.py
+│   ├── hooks.py
+│   ├── cli.py
+│   └── commands/
+├── tests/
+├── samples/
+├── demo/
+├── docs/
+├── pyproject.toml
+└── README.md
 ```
 
 ## License
 
-Copyright 2026 Andreas Jung (info@zopyx.com)
+MIT

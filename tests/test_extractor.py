@@ -247,9 +247,7 @@ class TestValidateFormData:
         test_file = tmp_path / "test.pdf"
         test_file.touch()
 
-        with patch(
-            "privacyforms_pdf.extractor.PdfReader", side_effect=Exception("corrupted")
-        ):
+        with patch("privacyforms_pdf.extractor.PdfReader", side_effect=Exception("corrupted")):
             errors = extractor.validate_form_data(test_file, {"Name": "John"})
             assert len(errors) == 1
             assert "Could not read PDF" in errors[0]
@@ -367,9 +365,7 @@ class TestFillForm:
             patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
             patch.object(extractor._filler, "fill", return_value=output_file) as mock_fill,
         ):
-            result = extractor.fill_form(
-                test_file, {"Name": "John"}, output_file, validate=True
-            )
+            result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=True)
             assert result == output_file
             mock_fill.assert_called_once_with(
                 test_file, {"Name": "John"}, output_file, validate=False

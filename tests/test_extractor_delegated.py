@@ -11,16 +11,16 @@ class TestDelegatedMethods:
     """Tests for thin wrapper methods delegating to FormFiller."""
 
     def test_fill_form_fields_without_appearance(self) -> None:
+        """Test delegation of _fill_form_fields_without_appearance."""
         extractor = PDFFormExtractor()
         writer = MagicMock()
         field_values = {"field": "value"}
-        with patch.object(
-            extractor._filler, "_fill_form_fields_without_appearance"
-        ) as mock:
+        with patch.object(extractor._filler, "_fill_form_fields_without_appearance") as mock:
             extractor._fill_form_fields_without_appearance(writer, field_values)
             mock.assert_called_once_with(writer, field_values)
 
     def test_get_field_by_name_from_writer(self) -> None:
+        """Test delegation of get_field_by_name_from_writer."""
         extractor = PDFFormExtractor()
         writer = MagicMock()
         with patch.object(
@@ -33,6 +33,7 @@ class TestDelegatedMethods:
             assert result == {"name": "field"}
 
     def test_get_widget_annotation(self) -> None:
+        """Test delegation of _get_widget_annotation."""
         annotation_ref = MagicMock()
         with patch(
             "privacyforms_pdf.extractor.FormFiller._get_widget_annotation",
@@ -43,6 +44,7 @@ class TestDelegatedMethods:
             assert result == ("a", "b")
 
     def test_get_widget_on_state(self) -> None:
+        """Test delegation of _get_widget_on_state."""
         annotation = MagicMock()
         with patch(
             "privacyforms_pdf.extractor.FormFiller._get_widget_on_state",
@@ -53,50 +55,47 @@ class TestDelegatedMethods:
             assert result == "/On"
 
     def test_resolve_radio_field_state(self) -> None:
+        """Test delegation of _resolve_radio_field_state."""
         parent_annotation = MagicMock()
         with patch(
             "privacyforms_pdf.extractor.FormFiller._resolve_radio_field_state",
             return_value="/Yes",
         ) as mock:
-            result = PDFFormExtractor._resolve_radio_field_state(
-                parent_annotation, "Yes"
-            )
+            result = PDFFormExtractor._resolve_radio_field_state(parent_annotation, "Yes")
             mock.assert_called_once_with(parent_annotation, "Yes")
             assert result == "/Yes"
 
     def test_sync_radio_button_states(self) -> None:
+        """Test delegation of _sync_radio_button_states."""
         extractor = PDFFormExtractor()
         writer = MagicMock()
         field_values = {"field": "value"}
-        with patch.object(
-            extractor._filler, "_sync_radio_button_states"
-        ) as mock:
+        with patch.object(extractor._filler, "_sync_radio_button_states") as mock:
             extractor._sync_radio_button_states(writer, field_values)
             mock.assert_called_once_with(writer, field_values)
 
     def test_resolve_listbox_index(self) -> None:
+        """Test delegation of _resolve_listbox_index."""
         parent_annotation = MagicMock()
         with patch(
             "privacyforms_pdf.extractor.FormFiller._resolve_listbox_index",
             return_value=1,
         ) as mock:
-            result = PDFFormExtractor._resolve_listbox_index(
-                parent_annotation, "option"
-            )
+            result = PDFFormExtractor._resolve_listbox_index(parent_annotation, "option")
             mock.assert_called_once_with(parent_annotation, "option")
             assert result == 1
 
     def test_sync_listbox_selection_indexes(self) -> None:
+        """Test delegation of _sync_listbox_selection_indexes."""
         extractor = PDFFormExtractor()
         writer = MagicMock()
         field_values = {"field": "value"}
-        with patch.object(
-            extractor._filler, "_sync_listbox_selection_indexes"
-        ) as mock:
+        with patch.object(extractor._filler, "_sync_listbox_selection_indexes") as mock:
             extractor._sync_listbox_selection_indexes(writer, field_values)
             mock.assert_called_once_with(writer, field_values)
 
     def test_escape_pdf_text(self) -> None:
+        """Test delegation of _escape_pdf_text."""
         with patch(
             "privacyforms_pdf.extractor.FormFiller._escape_pdf_text",
             return_value="escaped",
@@ -106,6 +105,7 @@ class TestDelegatedMethods:
             assert result == "escaped"
 
     def test_build_listbox_appearance_stream(self) -> None:
+        """Test delegation of _build_listbox_appearance_stream."""
         extractor = PDFFormExtractor()
         writer = MagicMock()
         annotation = MagicMock()
@@ -119,7 +119,5 @@ class TestDelegatedMethods:
             result = extractor._build_listbox_appearance_stream(
                 writer, annotation, parent_annotation, 1
             )
-            mock.assert_called_once_with(
-                writer, annotation, parent_annotation, 1
-            )
+            mock.assert_called_once_with(writer, annotation, parent_annotation, 1)
             assert result is expected

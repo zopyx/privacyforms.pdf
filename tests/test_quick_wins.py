@@ -7,7 +7,7 @@ import pytest
 from privacyforms_pdf.backends import __all__ as backends_all
 from privacyforms_pdf.hooks import PDFFormsCommandsSpec
 from privacyforms_pdf.models import FormValidationError
-from privacyforms_pdf.schema import FieldLayout, PDFField, RowGroup
+from privacyforms_pdf.schema import FieldLayout, PDFField
 from privacyforms_pdf.schema_layout import _build_rows
 
 

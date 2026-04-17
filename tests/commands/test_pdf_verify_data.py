@@ -144,6 +144,7 @@ class TestVerifyDataCommand:
         for _ in range(55):
             deep = {"nested": deep}
         import json
+
         data_json.write_text(json.dumps(deep))
 
         result = runner.invoke(
@@ -208,10 +209,13 @@ class TestHelperFunctions:
 
     def test_safe_json_loads_recursion_error(self) -> None:
         """Test _safe_json_loads raises ClickException on RecursionError."""
-        with patch(
-            "privacyforms_pdf.commands.pdf_verify_data.json.loads",
-            side_effect=RecursionError("deep"),
-        ), pytest.raises(click.ClickException, match="too deeply nested"):
+        with (
+            patch(
+                "privacyforms_pdf.commands.pdf_verify_data.json.loads",
+                side_effect=RecursionError("deep"),
+            ),
+            pytest.raises(click.ClickException, match="too deeply nested"),
+        ):
             _safe_json_loads("{}")
 
     def test_require_json_object_not_mapping(self) -> None:

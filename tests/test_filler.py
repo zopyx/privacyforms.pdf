@@ -576,7 +576,6 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
             filler._fill_form_fields_without_appearance(writer, {"Colors": "Red"})
             mock_sync.assert_called_once_with(writer, {"Colors": "Red"})
 
-
     def test_sync_listbox_selected_index_none(self) -> None:
         """Test _sync_listbox_selection_indexes when selected_index is None."""
         filler = FormFiller()
@@ -597,7 +596,9 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
             patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
             patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]),
             patch.object(filler, "_resolve_listbox_index", return_value=None),
-            patch.object(filler, "_build_listbox_appearance_stream", return_value=None) as mock_build,
+            patch.object(
+                filler, "_build_listbox_appearance_stream", return_value=None
+            ) as mock_build,
         ):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Purple"})
             assert widget["/V"] == TextStringObject("Purple")

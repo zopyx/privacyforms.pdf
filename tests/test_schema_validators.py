@@ -36,7 +36,8 @@ class TestChoiceOptionValidators:
 
     def test_value_too_long(self) -> None:
         """Test choice value exceeding 4096 characters is rejected."""
-        with pytest.raises(ValueError, match="choice value exceeds maximum length of 4096 characters"):
+        match = "choice value exceeds maximum length of 4096 characters"
+        with pytest.raises(ValueError, match=match):
             ChoiceOption(value="x" * 4097)
 
     def test_text_none_allowed(self) -> None:
@@ -94,7 +95,8 @@ class TestPDFFieldValidators:
 
     def test_name_too_long(self) -> None:
         """Test field name exceeding 2048 characters is rejected."""
-        with pytest.raises(ValueError, match="field name exceeds maximum length of 2048 characters"):
+        match = "field name exceeds maximum length of 2048 characters"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="x" * 2049, id="f-1", type="textfield")
 
     def test_id_empty_after_strip(self) -> None:
@@ -116,3 +118,38 @@ class TestPDFFieldValidators:
         """Test format exceeding 4096 characters is rejected."""
         with pytest.raises(ValueError, match="field exceeds maximum length of 4096 characters"):
             PDFField(name="Name", id="f-1", type="datefield", format="x" * 4097)
+
+
+class TestPDFFieldValueLengthValidators:
+    """Tests for validate_value_length edge cases."""
+
+    def test_value_string_too_long(self) -> None:
+        """String value exceeding 100k characters is rejected (line 330)."""
+        match = "field value exceeds maximum length of 100000 characters"
+        with pytest.raises(ValueError, match=match):
+            PDFField(name="Name", id="f-1", type="textfield", value="x" * 100_001)
+
+    def test_value_list_item_too_long(self) -> None:
+        """List value item exceeding 100k characters is rejected (line 332)."""
+        from privacyforms_pdf.schema import FieldFlags
+
+        flags = FieldFlags(multi_select=True)
+        match = "list value item exceeds maximum length of 100000 characters"
+        with pytest.raises(ValueError, match=match):
+            PDFField(
+                name="Options", id="f-1", type="listbox", value=["x" * 100_001], field_flags=flags
+            )
+
+
+class TestPDFFieldPositiveIntegerValidators:
+    """Tests for validate_positive_integers edge cases."""
+
+    def test_max_length_zero(self) -> None:
+        """max_length of zero is rejected (line 340)."""
+        with pytest.raises(ValueError, match="numeric field constraints must be positive"):
+            PDFField(name="Name", id="f-1", type="textfield", max_length=0)
+
+    def test_max_length_too_large(self) -> None:
+        """max_length above 1_000_000 is rejected (line 342)."""
+        with pytest.raises(ValueError, match="numeric field constraints must not exceed 1000000"):
+            PDFField(name="Name", id="f-1", type="textfield", max_length=1_000_001)

@@ -20,7 +20,6 @@ from privacyforms_pdf.parser import (
     _collect_annotation_info,
     _extract_choices_for_button,
     _extract_choices_for_choice,
-    extract_pdf_form,
     _get_appearance_states,
     _is_date_field,
     _normalize_value,
@@ -29,6 +28,7 @@ from privacyforms_pdf.parser import (
     determine_button_type,
     determine_choice_type,
     determine_text_type,
+    extract_pdf_form,
     get_field_options,
     get_field_type,
     parse_pdf,
@@ -508,11 +508,7 @@ class TestGetAppearanceStatesExtra:
         d = DictionaryObject(
             {
                 NameObject("/AP"): DictionaryObject(
-                    {
-                        NameObject("/N"): DictionaryObject(
-                            {NameObject("On"): DictionaryObject()}
-                        )
-                    }
+                    {NameObject("/N"): DictionaryObject({NameObject("On"): DictionaryObject()})}
                 )
             }
         )
@@ -527,11 +523,7 @@ class TestExtractChoicesForButtonExtra:
         d = DictionaryObject(
             {
                 NameObject("/AP"): DictionaryObject(
-                    {
-                        NameObject("/N"): DictionaryObject(
-                            {NameObject("/Yes"): DictionaryObject()}
-                        )
-                    }
+                    {NameObject("/N"): DictionaryObject({NameObject("/Yes"): DictionaryObject()})}
                 )
             }
         )
@@ -542,9 +534,7 @@ class TestExtractChoicesForButtonExtra:
         """It handles /V values that do not start with a slash."""
         d = DictionaryObject({NameObject("/V"): NameObject("Selected")})
         result = _extract_choices_for_button(d)
-        assert result == [
-            ChoiceOption(value="Selected", text="Selected", source_name="Selected")
-        ]
+        assert result == [ChoiceOption(value="Selected", text="Selected", source_name="Selected")]
 
 
 class TestDetermineTypesExtra:
@@ -699,7 +689,7 @@ class TestResolveKidLayoutExtra:
                 self.generation = generation
 
         kid = MockKid(1, 0)
-        ref_map = {(1, 0): (2, None)}
+        ref_map: dict[tuple[int, int], tuple[int, list[float] | None]] = {(1, 0): (2, None)}
         page, rect = _resolve_kid_layout(ArrayObject([kid]), ref_map)
         assert page == 2
         assert rect is None
@@ -948,7 +938,9 @@ class TestResolveKidLayoutExtra2:
                 self.generation = generation
 
         kid = MockKid(1, 0)
-        ref_map = {(1, 0): (1, [0, 0, 10, 10])}
+        ref_map: dict[tuple[int, int], tuple[int, list[float] | None]] = {
+            (1, 0): (1, [0.0, 0.0, 10.0, 10.0])
+        }
         page, rect = _resolve_kid_layout(ArrayObject([kid]), ref_map)
         assert page == 1
         assert rect == [0.0, 0.0, 10.0, 10.0]
@@ -971,3 +963,39 @@ class TestParsePdfEdgeCasesExtra2:
             mock_reader.return_value.pages = []
             result = parse_pdf(tmp_path / "form.pdf")
             assert result.fields[0].value is True
+
+
+class TestParsePdfEdgeCasesExtra3:
+    """Edge-case tests that require deeper mocking."""
+
+    def test_unknown_field_type_else_branch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """It reaches the generic else branch for unexpected field types."""
+        field_dict = DictionaryObject(
+            {
+                NameObject("/T"): TextStringObject("X"),
+                NameObject("/FT"): NameObject("/Btn"),
+            }
+        )
+
+        class MockField:
+            def __init__(self, **kwargs: object) -> None:
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+
+        monkeypatch.setattr("privacyforms_pdf.parser.PDFField", MockField)
+        monkeypatch.setattr(
+            "privacyforms_pdf.parser.PDFRepresentation",
+            lambda **kwargs: type("MockRep", (), kwargs)(),
+        )
+        monkeypatch.setattr(
+            "privacyforms_pdf.parser.determine_button_type",
+            lambda *args, **kwargs: "unknown",
+        )
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
+            mock_reader.return_value.get_fields.return_value = {"X": field_dict}
+            mock_reader.return_value.pages = []
+            result = parse_pdf(tmp_path / "form.pdf")
+            assert result.fields[0].value is None
+            assert result.fields[0].default_value is None

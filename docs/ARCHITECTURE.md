@@ -1,355 +1,280 @@
 # privacyforms-pdf — Technical Documentation
 
-> **Version:** 0.1.3  
-> **Scope:** API reference, architecture overview, data models, and execution workflows.
-
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Package Structure](#package-structure)
-3. [Data Models](#data-models)
-4. [Core Workflows](#core-workflows)
-5. [CLI Architecture](#cli-architecture)
-6. [Error Handling](#error-handling)
-7. [Diagram Assets](#diagram-assets)
-
----
+> **Version:** 0.2.0
+> **Scope:** Current package architecture, public API, CLI wiring, and data flow.
 
 ## Architecture Overview
 
-`privacyforms-pdf` is a pure-Python library built on top of [`pypdf`](https://pypdf.readthedocs.io/). It exposes both a programmatic API (`PDFFormExtractor`) and a command-line interface (`pdf-forms`). All PDF I/O is delegated to `pypdf`; the library itself contains no native extensions.
+`privacyforms-pdf` is a pure-Python library built on top of `pypdf`. The codebase has two primary workflows:
 
-### Component Diagram
+- parse a PDF into a canonical `PDFRepresentation`
+- fill a PDF from simple key/value data
 
-```mermaid
-graph LR
-    subgraph "Client Layer"
-        A[Python Application]
-        B[pdf-forms CLI]
-    end
+The package deliberately separates those concerns:
 
-    subgraph "privacyforms-pdf Library"
-        C[PDFFormExtractor]
-        D[PDFField Models]
-        E[CLI Module]
-    end
+- `parser.py` performs extraction and normalization
+- `schema.py` defines the canonical document model
+- `schema_layout.py` derives layout hints and row groupings
+- `filler.py` handles PDF mutation and appearance synchronization
+- `extractor.py` provides the higher-level validation/fill facade
+- `cli.py` loads Click commands through `pluggy`
 
-    subgraph "External Dependencies"
-        F[pypdf<br/>PdfReader / PdfWriter]
-    end
+## Package Structure
 
-    subgraph "I/O"
-        G[PDF Files]
-        H[JSON Files]
-    end
-
-    A -->|import| C
-    B -->|click| E
-    E -->|uses| C
-    C -->|reads/writes| F
-    F -->|processes| G
-    C -->|produces| H
-    D -.->|validated by| C
+```text
+privacyforms_pdf/
+├── __init__.py
+├── schema.py
+├── schema_layout.py
+├── parser.py
+├── extractor.py
+├── filler.py
+├── hooks.py
+├── utils.py
+├── cli.py
+├── backends/
+└── commands/
+    ├── __init__.py
+    ├── utils.py
+    ├── pdf_parse.py
+    ├── pdf_fill_form.py
+    ├── pdf_info.py
+    ├── pdf_verify_data.py
+    └── pdf_verify_json.py
 ```
 
-### Package Structure
+## Main Components
 
-```mermaid
-graph TD
-    Root[privacyforms-pdf/] --> P[privacyforms_pdf/]
-    Root --> T[tests/]
-    Root --> S[samples/]
-    Root --> D[demo/]
-    Root --> G[.github/workflows/]
-    Root --> Py[pyproject.toml]
+### `schema.py`
 
-    P --> I[__init__.py]
-    P --> E[extractor.py]
-    P --> CLI[cli.py]
+Defines the canonical document model used across parse and verification flows:
 
-    T --> C[conftest.py]
-    T --> TE[test_extractor.py]
-    T --> TC[test_cli.py]
-```
+- `PDFRepresentation`
+- `PDFField`
+- `FieldFlags`
+- `FieldLayout`
+- `ChoiceOption`
+- `RowGroup`
 
----
+This is the central data contract of the project.
 
-## Data Models
+### `parser.py`
 
-### Class Diagram
+Responsible for:
 
-```mermaid
-classDiagram
-    class PDFFormExtractor {
-        -float _timeout_seconds
-        -bool _extract_geometry
-        +__init__(timeout_seconds, extract_geometry)
-        +has_form(pdf_path) bool
-        +extract(pdf_path) PDFFormData
-        +extract_to_json(pdf_path, output_path)
-        +list_fields(pdf_path) list~PDFField~
-        +get_field_value(pdf_path, field_name) str|bool|None
-        +get_field_by_id(pdf_path, field_id) PDFField|None
-        +get_field_by_name(pdf_path, field_name) PDFField|None
-        +validate_form_data(pdf_path, form_data, strict, allow_extra_fields) list~str~
-        +fill_form(pdf_path, form_data, output_path, validate) Path
-        +fill_form_from_json(pdf_path, json_path, output_path, validate) Path
-        -_validate_pdf_path(pdf_path)
-        -_get_field_type(field) str$
-        -_get_field_value(field) str|bool$
-        -_get_field_options(field) list~str~$
-        -_extract_widgets_info(reader) dict
-    }
+- reading PDFs with `pypdf.PdfReader`
+- normalizing field types and values
+- extracting structured choice data
+- resolving field layout from widget annotations
+- building row groups from layout analysis
 
-    class PDFFormData {
-        +Path source
-        +str pdf_version
-        +bool has_form
-        +list~PDFField~ fields
-        +dict raw_data
-        +to_json() str
-        +to_dict() dict
-    }
+Primary public entry points:
 
-    class PDFField {
-        +str name
-        +str id
-        +str field_type
-        +str|bool value
-        +list~int~ pages
-        +bool locked
-        +FieldGeometry|None geometry
-        +str|None format
-        +list~str~ options
-        +model_dump() dict
-    }
+- `parse_pdf()`
+- `extract_pdf_form()`
 
-    class FieldGeometry {
-        +int page
-        +tuple rect
-        +float x
-        +float y
-        +float width
-        +float height
-        +str units
-        +model_dump() dict
-    }
+### `schema_layout.py`
 
-    class FormField {
-        +str field_type
-        +list~int~ pages
-        +str id
-        +str name
-        +str|bool value
-        +bool locked
-    }
+Contains helper functions that convert raw annotation geometry into:
 
-    class PDFFormError
-    class PDFFormNotFoundError
-    class FieldNotFoundError
-    class FormValidationError
+- `FieldLayout`
+- visual `RowGroup` collections
 
-    PDFFormExtractor --> PDFFormData : creates
-    PDFFormExtractor --> PDFField : creates
-    PDFFormData --> PDFField : contains
-    PDFField --> FieldGeometry : optional
-    PDFFormError <|-- PDFFormNotFoundError
-    PDFFormError <|-- FieldNotFoundError
-    PDFFormError <|-- FormValidationError
-```
+### `filler.py`
 
-### Model Descriptions
+Contains `FormFiller`, the low-level writer used for:
 
-| Model | Purpose |
-|-------|---------|
-| `PDFFormExtractor` | Central orchestrator for reading, validating, and writing PDF forms. |
-| `PDFFormData` | Container for extracted form metadata (version, fields, raw data). |
-| `PDFField` | Pydantic v2 model representing a single form field with optional geometry. |
-| `FieldGeometry` | Pydantic v2 model holding a field’s bounding box and page location. |
-| `FormField` | Legacy plain class kept for backwards compatibility. |
+- text/checkbox/radio/listbox filling
+- widget appearance synchronization
+- fallbacks when `pypdf` appearance generation is insufficient
 
----
+### `extractor.py`
+
+Contains `PDFFormExtractor`, the higher-level facade currently focused on:
+
+- `has_form()`
+- `validate_form_data()`
+- `fill_form()`
+- `fill_form_from_json()`
+
+It also re-exports exceptions and a few helper utilities for compatibility.
+
+### `cli.py` And `commands/`
+
+The CLI is implemented with Click and loaded through `pluggy` entry points. Built-in commands currently include:
+
+- `parse`
+- `fill-form`
+- `info`
+- `verify-data`
+- `verify-json`
+
+## Public API
+
+### Parse API
+
+The current parse API is function-based:
+
+- `extract_pdf_form(pdf_filename: Path | str) -> PDFRepresentation`
+- `parse_pdf(pdf_path: Path | str, source: str | None = None, reader: PdfReader | None = None) -> PDFRepresentation`
+
+These functions return a validated `PDFRepresentation`.
+
+### Fill API
+
+The current fill/validation API is class-based:
+
+- `PDFFormExtractor.has_form(pdf_path)`
+- `PDFFormExtractor.validate_form_data(pdf_path, form_data, strict=False, allow_extra_fields=False)`
+- `PDFFormExtractor.fill_form(pdf_path, form_data, output_path=None, validate=True)`
+- `PDFFormExtractor.fill_form_from_json(pdf_path, json_path, output_path=None, validate=True)`
+
+### Low-Level Writer
+
+`FormFiller.fill()` is available as a lower-level writer API, but the primary supported entry point for normal use is `PDFFormExtractor`.
+
+## Data Model
+
+### `PDFRepresentation`
+
+Top-level document model:
+
+- `spec_version: str`
+- `source: str | None`
+- `fields: list[PDFField]`
+- `rows: list[RowGroup]`
+
+### `PDFField`
+
+Normalized field model:
+
+- `name`
+- `title`
+- `id`
+- `type`
+- `field_flags`
+- `layout`
+- `default_value`
+- `value`
+- `choices`
+- `format`
+- `max_length`
+- `textarea_rows`
+- `textarea_cols`
+
+Supported field types:
+
+- `textfield`
+- `textarea`
+- `datefield`
+- `checkbox`
+- `radiobuttongroup`
+- `combobox`
+- `listbox`
+- `signature`
+
+### `FieldLayout`
+
+Compact layout hints derived from widget rectangles:
+
+- `page`
+- `x`
+- `y`
+- `width`
+- `height`
+
+### `RowGroup`
+
+Represents visually grouped fields on the same page row. In JSON form, rows serialize field references as field IDs.
 
 ## Core Workflows
 
-### Form Extraction Sequence
+### Parse Flow
 
-The `extract()` method performs a two-pass scan:
-1. **Field scan** via `PdfReader.get_fields()`
-2. **Widget scan** via page annotations (`/Annots`) to resolve page numbers and geometry.
+1. `parse_pdf()` opens the PDF with `PdfReader`
+2. `reader.get_fields()` returns the form field map
+3. page annotations are scanned to resolve widget rectangles
+4. raw PDF fields are normalized into `PDFField`
+5. layout data is converted into `FieldLayout`
+6. visual rows are built from field layout
+7. the result is returned as `PDFRepresentation`
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client
-    participant E as PDFFormExtractor
-    participant V as _validate_pdf_path
-    participant R as pypdf.PdfReader
-    participant W as _extract_widgets_info
-    participant F as PDFField
-    participant D as PDFFormData
+### Fill Flow
 
-    C->>E: extract(pdf_path)
-    E->>V: _validate_pdf_path(pdf_path)
-    V-->>E: OK
-    E->>R: PdfReader(str(pdf_path))
-    E->>R: get_fields()
-    R-->>E: dict[field_name, field_data]
-
-    E->>W: _extract_widgets_info(reader)
-    loop For each page with /Annots
-        W->>W: scan widget annotations
-        W->>W: extract page + geometry
-    end
-    W-->>E: widget_info
-
-    loop For each field
-        E->>E: _get_field_type(field_data)
-        E->>E: _get_field_value(field_data)
-        E->>E: _get_field_options(field_data)
-        E->>F: PDFField(name, type, value, pages, geometry, ...)
-        F-->>E: pdffield
-    end
-
-    E->>E: _build_raw_data_structure(fields, source)
-    E->>D: PDFFormData(source, version, has_form, fields, raw_data)
-    D-->>E: form_data
-    E-->>C: PDFFormData
-```
-
-### Form Filling Sequence
-
-Form filling creates a **new PDF stream** via `PdfWriter.append(reader)` and updates widget values page-by-page.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client
-    participant E as PDFFormExtractor
-    participant V as _validate_pdf_path
-    participant H as has_form
-    participant Val as validate_form_data
-    participant R as pypdf.PdfReader
-    participant W as pypdf.PdfWriter
-    participant P as PDF File
-
-    C->>E: fill_form(pdf, data, output, validate=True)
-    E->>V: _validate_pdf_path(pdf)
-    V-->>E: OK
-    E->>H: has_form(pdf)
-    H-->>E: true
-
-    opt validate=True
-        E->>Val: validate_form_data(pdf, data)
-        Val-->>E: [] (no errors)
-    end
-
-    E->>R: PdfReader(str(pdf))
-    E->>W: PdfWriter()
-    E->>W: writer.append(reader)
-
-    loop Convert data values
-        E->>E: bool -> "/Yes" / "/Off"
-        E->>E: other -> str(value)
-    end
-
-    loop For each page in writer
-        E->>W: update_page_form_field_values(page, field_values)
-    end
-
-    E->>P: write(output_file)
-    W->>P: write(f)
-    P-->>E: filled PDF
-    E-->>C: Path(output_file)
-```
-
----
+1. `PDFFormExtractor.fill_form()` validates the PDF path
+2. `has_form()` ensures the PDF contains form fields
+3. `validate_form_data()` optionally checks field names and checkbox value types
+4. `FormFiller.fill()` writes values via `PdfWriter`
+5. radio/listbox widget states are synchronized for viewer compatibility
+6. the filled PDF is written to disk
 
 ## CLI Architecture
 
-The CLI is implemented with **Click** and delegates all heavy work to `PDFFormExtractor`. Each subcommand is a thin wrapper that:
-1. Instantiates an extractor via `create_extractor()`
-2. Calls the corresponding library method
-3. Formats and prints the result (JSON, table, or plain text)
-4. Translates library exceptions into `click.ClickException`
+The CLI is intentionally thin.
 
-### CLI Command Flow
+### `parse`
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User
-    participant Cl as Click CLI
-    participant C as CLI Module
-    participant Ex as create_extractor
-    participant E as PDFFormExtractor
+- calls `extract_pdf_form()`
+- writes `representation.to_compact_json()`
+- prints a row summary
 
-    U->>Cl: pdf-forms extract form.pdf -o out.json
-    Cl->>C: extract(pdf_path, output, raw)
-    C->>Ex: create_extractor()
-    Ex-->>C: PDFFormExtractor()
-    C->>E: extract(pdf_path)
-    E-->>C: PDFFormData
-    C->>C: json.dump(form_data.to_dict(), f)
-    C-->>Cl: success message
-    Cl-->>U: stdout + file written
-```
+### `verify-json`
 
-### Command Mapping
+- reads a JSON file
+- validates it with `PDFRepresentation.model_validate_json()`
 
-| CLI Command | Library Method | Output Format |
-|-------------|----------------|---------------|
-| `check` | — | Human-readable status |
-| `info <pdf>` | `has_form()` | `✓` / `✗` message |
-| `extract <pdf>` | `extract()` | JSON (stdout or file) |
-| `list-fields <pdf>` | `list_fields()` | Aligned table |
-| `get-value <pdf> <field>` | `get_field_value()` | Plain value |
-| `fill-form <pdf> <json>` | `fill_form_from_json()` | Filled PDF file |
+### `verify-data`
 
----
+- validates a parsed representation JSON file
+- checks that sample data keys match parsed field IDs
+
+Important:
+
+- `verify-data` is ID-based
+- `fill-form` is name-based
+
+### `fill-form`
+
+- reads simple JSON key/value data
+- optionally validates field names and checkbox value types
+- fills the target PDF
+
+### `info`
+
+- reports whether a PDF contains a form
 
 ## Error Handling
 
-All library exceptions inherit from `PDFFormError`. The CLI catches these and re-raises them as `click.ClickException`, ensuring a clean exit code and user-friendly message.
+All project-specific exceptions derive from `PDFFormError`:
 
-### Exception Hierarchy
+- `PDFFormNotFoundError`
+- `FieldNotFoundError`
+- `FormValidationError`
 
-```mermaid
-graph TD
-    A[Exception] --> B[PDFFormError]
-    B --> C[PDFFormNotFoundError]
-    B --> D[FieldNotFoundError]
-    B --> E[FormValidationError]
-```
+CLI commands convert those exceptions into `click.ClickException` for user-facing errors.
 
-### Exception Usage Matrix
+## Extension Model
 
-| Exception | Raised By | Typical Cause |
-|-----------|-----------|---------------|
-| `PDFFormNotFoundError` | `extract()`, `fill_form()` | PDF contains no AcroForm. |
-| `FormValidationError` | `fill_form()` with `validate=True` | Unknown field, type mismatch, or strict-mode missing field. |
-| `FieldNotFoundError` | *(public API)* | Explicit lookup by name/ID failed. |
+CLI command extension is based on `pluggy`.
 
+- hook spec: `PDFFormsCommandsSpec.register_commands()`
+- built-in commands are registered under the `privacyforms_pdf.commands` entry-point group
+- third-party packages can register additional Click commands using the same hook
 
----
+## Design Notes
 
-## Diagram Assets
+### Why The Parse API Is Function-Based
 
-For online documentation and GitHub rendering, SVG exports of every diagram are provided in the `docs/diagrams/` directory.
+The codebase currently treats parsing as schema production rather than as an instance-oriented extractor method. That keeps the read path simple and makes `PDFRepresentation` the stable parse result.
 
-| Diagram | Markdown Embed | SVG File |
-|---------|---------------|----------|
-| Component Diagram | above | `diagrams/architecture-components.svg` |
-| Package Structure | above | `diagrams/package-structure.svg` |
-| Class Diagram | above | `diagrams/class-diagram.svg` |
-| Extraction Sequence | above | `diagrams/sequence-extract.svg` |
-| Filling Sequence | above | `diagrams/sequence-fill.svg` |
-| CLI Sequence | above | `diagrams/sequence-cli.svg` |
-| Exception Hierarchy | above | `diagrams/exception-hierarchy.svg` |
+### Why The Fill API Is Class-Based
 
-> **Tip:** If your documentation platform (e.g., MkDocs, Docusaurus) does not support Mermaid natively, reference the SVG files directly with standard Markdown image syntax:
-> ```markdown
-> ![Component Diagram](diagrams/architecture-components.svg)
-> ```
+The fill path benefits from a small facade that can:
+
+- validate inputs
+- centralize exception behavior
+- delegate writing details to `FormFiller`
+
+### Compatibility Layer
+
+`extractor.py` still exports a few helper functions and delegated wrappers for compatibility and tests. The canonical read model, however, is `PDFRepresentation`, not the older `PDFFormData` structure.
