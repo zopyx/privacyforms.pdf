@@ -10,7 +10,7 @@ dependencies = [
     "click>=8",
     "pluggy>=1",
     "pydantic>=2",
-    "pypdf>=5",
+    "pypdf>=6.10.2",
     "rich>=13",
 ]
 
@@ -33,9 +33,11 @@ build-backend = "setuptools.build_meta"
 dev = [
     "bandit>=1.9.4",
     "nox>=2026.2.9",
+    "pip-audit>=2.10.0",
     "pytest>=9",
     "pytest-cov>=7",
     "ruff>=0.15",
+    "safety>=3.7.0",
     "setuptools>=75",
     "ty>=0.0.21",
 ]
