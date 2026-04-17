@@ -130,20 +130,20 @@ json_text = representation.to_compact_json()
 ```python
 from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormService()
+service = PDFFormService()
 
-has_form = extractor.has_form("form.pdf")
+has_form = service.has_form("form.pdf")
 
 form_data = {
     "f-0": "John Smith",
     "f-3": True,
 }
 
-errors = extractor.validate_form_data("form.pdf", form_data, key_mode="id")
+errors = service.validate_form_data("form.pdf", form_data, key_mode="id")
 if errors:
     print(errors)
 else:
-    extractor.fill_form("form.pdf", form_data, "filled.pdf", key_mode="id")
+    service.fill_form("form.pdf", form_data, "filled.pdf", key_mode="id")
 ```
 
 You can also fill from a JSON file:
@@ -151,21 +151,21 @@ You can also fill from a JSON file:
 ```python
 from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormService()
-extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf", key_mode="id")
+service = PDFFormService()
+service.fill_form_from_json("form.pdf", "data.json", "filled.pdf", key_mode="id")
 ```
 
-The class also exposes extractor-style read helpers:
+The class also exposes read helpers:
 
 ```python
 from privacyforms_pdf import PDFFormService
 
-extractor = PDFFormService()
-representation = extractor.extract("form.pdf")
-fields = extractor.list_fields("form.pdf")
-field = extractor.get_field_by_id("form.pdf", "f-0")
-value = extractor.get_field_value("form.pdf", "Candidate Name")
-extractor.extract_to_json("form.pdf", "representation.json")
+service = PDFFormService()
+representation = service.extract("form.pdf")
+fields = service.list_fields("form.pdf")
+field = service.get_field_by_id("form.pdf", "f-0")
+value = service.get_field_value("form.pdf", "Candidate Name")
+service.extract_to_json("form.pdf", "representation.json")
 ```
 
 ## Public Objects
