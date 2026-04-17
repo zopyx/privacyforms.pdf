@@ -417,9 +417,7 @@ class TestFillForm:
         ):
             result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
             assert result == output_file
-            mock_fill.assert_called_once_with(
-                test_file, {"Name": "John"}, output_file, validate=False
-            )
+            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
 
     def test_fill_form_falls_back_on_pypdf_appearance_error(self, tmp_path: Path) -> None:
         """Test fill_form fallback is used for pypdf appearance-stream bug."""
@@ -465,9 +463,7 @@ class TestFillForm:
         ):
             result = extractor.fill_form(test_file, {"Name": "John"}, output_file, validate=True)
             assert result == output_file
-            mock_fill.assert_called_once_with(
-                test_file, {"Name": "John"}, output_file, validate=False
-            )
+            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
 
     def test_fill_form_with_id_keys_normalizes_before_fill(self, tmp_path: Path) -> None:
         """Test fill_form maps field IDs to names before delegating to the filler."""
@@ -494,8 +490,31 @@ class TestFillForm:
                 key_mode="id",
             )
             assert result == output_file
-            mock_fill.assert_called_once_with(
-                test_file, {"Name": "John"}, output_file, validate=False
+            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
+
+    def test_fill_form_duplicate_keys_raise(self, tmp_path: Path) -> None:
+        """Test fill_form raises when two keys map to the same form field."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        parsed_field = type("ParsedField", (), {"id": "f-0", "name": "Name"})()
+        parsed_representation = MagicMock(fields=[parsed_field])
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch.object(extractor, "extract", return_value=parsed_representation),
+            pytest.raises(FormValidationError, match="key normalization failed"),
+        ):
+            extractor.fill_form(
+                test_file,
+                {"Name": "John", "f-0": "Jane"},
+                output_file,
+                validate=False,
+                key_mode="auto",
             )
 
 
@@ -522,9 +541,7 @@ class TestFillFormFromJson:
                 test_file, json_file, output_file, validate=False
             )
             assert result == output_file
-            mock_fill.assert_called_once_with(
-                test_file, {"Name": "John"}, output_file, validate=False
-            )
+            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
 
     def test_fill_form_from_json_not_found(self, tmp_path: Path) -> None:
         """Test fill_form_from_json raises when JSON not found."""

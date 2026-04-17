@@ -10,11 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from privacyforms_pdf.cli import main
-from privacyforms_pdf.commands.pdf_verify_data import (
-    _check_json_depth,
-    _check_json_size,
-    _require_json_object,
-    _safe_json_loads,
+from privacyforms_pdf.commands.pdf_verify_data import _check_json_size
+from privacyforms_pdf.json_utils import (
+    check_json_depth,
+    require_json_object,
+    safe_json_loads,
 )
 
 if TYPE_CHECKING:
@@ -176,6 +176,60 @@ class TestVerifyDataCommand:
         assert result.exit_code != 0
         assert "must be a top-level object" in result.output
 
+    def test_verify_data_id_mode_success(self, tmp_path: Path) -> None:
+        """Test verify-data with matching field IDs in id mode."""
+        runner = CliRunner()
+        form_json = tmp_path / "form.json"
+        form_json.write_text(
+            '{"spec_version": "1.0", "source": "test.pdf", '
+            '"fields": [{"name": "f1", "id": "f-0", "type": "textfield"}], '
+            '"rows": []}'
+        )
+        data_json = tmp_path / "data.json"
+        data_json.write_text('{"f-0": "John"}')
+
+        result = runner.invoke(
+            main,
+            [
+                "verify-data",
+                "--form-json",
+                str(form_json),
+                "--data-json",
+                str(data_json),
+                "--key-mode",
+                "id",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Valid" in result.output
+
+    def test_verify_data_id_mode_reports_id_lookup(self, tmp_path: Path) -> None:
+        """Test verify-data id mode reports missing field IDs."""
+        runner = CliRunner()
+        form_json = tmp_path / "form.json"
+        form_json.write_text(
+            '{"spec_version": "1.0", "source": "test.pdf", '
+            '"fields": [{"name": "f1", "id": "f-0", "type": "textfield"}], '
+            '"rows": []}'
+        )
+        data_json = tmp_path / "data.json"
+        data_json.write_text('{"f-1": "John"}')
+
+        result = runner.invoke(
+            main,
+            [
+                "verify-data",
+                "--form-json",
+                str(form_json),
+                "--data-json",
+                str(data_json),
+                "--key-mode",
+                "id",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "field IDs" in result.output
+
     def test_verify_data_name_mode_reports_name_lookup(self, tmp_path: Path) -> None:
         """Test verify-data name mode reports missing field names."""
         runner = CliRunner()
@@ -240,7 +294,7 @@ class TestVerifyDataCommand:
         data_json.write_text('{"f-0": "John"}')
 
         with patch(
-            "privacyforms_pdf.commands.pdf_verify_data.json.loads",
+            "privacyforms_pdf.json_utils.json.loads",
             side_effect=RecursionError("deep"),
         ):
             result = runner.invoke(
@@ -258,7 +312,7 @@ class TestVerifyDataCommand:
 
 
 class TestHelperFunctions:
-    """Direct tests for helper functions in pdf_verify_data."""
+    """Direct tests for shared JSON helper functions."""
 
     def test_check_json_size_exceeds_limit(self, tmp_path: Path) -> None:
         """Test _check_json_size raises ClickException for oversized files."""
@@ -268,30 +322,30 @@ class TestHelperFunctions:
             _check_json_size(path, max_size=0)
 
     def test_check_json_depth_list(self) -> None:
-        """Test _check_json_depth iterates over list items."""
+        """Test check_json_depth iterates over list items."""
         obj = [{"nested": [1, 2, 3]}, "string"]
-        _check_json_depth(obj)
+        check_json_depth(obj)
 
     def test_check_json_depth_exceeds_max(self) -> None:
-        """Test _check_json_depth raises ClickException when depth exceeds max."""
+        """Test check_json_depth raises ValueError when depth exceeds max."""
         deep = {"key": "value"}
         for _ in range(55):
             deep = {"nested": deep}
-        with pytest.raises(click.ClickException, match="exceeds maximum nesting depth"):
-            _check_json_depth(deep)
+        with pytest.raises(ValueError, match="exceeds maximum nesting depth"):
+            check_json_depth(deep)
 
     def test_safe_json_loads_recursion_error(self) -> None:
-        """Test _safe_json_loads raises ClickException on RecursionError."""
+        """Test safe_json_loads raises ValueError on RecursionError."""
         with (
             patch(
-                "privacyforms_pdf.commands.pdf_verify_data.json.loads",
+                "privacyforms_pdf.json_utils.json.loads",
                 side_effect=RecursionError("deep"),
             ),
-            pytest.raises(click.ClickException, match="too deeply nested"),
+            pytest.raises(ValueError, match="too deeply nested"),
         ):
-            _safe_json_loads("{}")
+            safe_json_loads("{}")
 
     def test_require_json_object_not_mapping(self) -> None:
-        """Test _require_json_object raises ClickException for non-mapping data."""
-        with pytest.raises(click.ClickException, match="must be a top-level object"):
-            _require_json_object(["not", "an", "object"])
+        """Test require_json_object raises ValueError for non-mapping data."""
+        with pytest.raises(ValueError, match="top-level object"):
+            require_json_object(["not", "an", "object"])

@@ -34,7 +34,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
         ):
-            result = filler.fill(test_file, {"Name": "John"}, output_file, validate=False)
+            result = filler.fill(test_file, {"Name": "John"}, output_file)
             assert result == output_file
             mock_writer.update_page_form_field_values.assert_called()
 
@@ -59,7 +59,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
             patch.object(filler, "_fill_form_fields_without_appearance") as fallback,
         ):
-            result = filler.fill(test_file, {"Name": "John"}, output_file, validate=False)
+            result = filler.fill(test_file, {"Name": "John"}, output_file)
             assert result == output_file
             fallback.assert_called_once_with(mock_writer, {"Name": "John"})
 
@@ -82,7 +82,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
             pytest.raises(AttributeError, match="different bug"),
         ):
-            filler.fill(test_file, {"Name": "John"}, output_file, validate=False)
+            filler.fill(test_file, {"Name": "John"}, output_file)
 
     def test_fill_empty_form_data(self, tmp_path: PathType) -> None:
         """Test FormFiller.fill with empty form data skips field updates."""
@@ -101,7 +101,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
         ):
-            result = filler.fill(test_file, {}, output_file, validate=False)
+            result = filler.fill(test_file, {}, output_file)
             assert result == output_file
             mock_writer.update_page_form_field_values.assert_not_called()
 
@@ -123,7 +123,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
             patch.object(filler, "_sync_radio_button_states") as mock_sync,
         ):
-            filler.fill(test_file, {"Choice": "/Yes"}, output_file, validate=False)
+            filler.fill(test_file, {"Choice": "/Yes"}, output_file)
             mock_sync.assert_called_once()
 
     def test_fill_with_listbox(self, tmp_path: PathType) -> None:
@@ -144,7 +144,7 @@ class TestFormFillerFill:
             patch("privacyforms_pdf.extractor.PdfWriter", return_value=mock_writer),
             patch.object(filler, "_sync_listbox_selection_indexes") as mock_sync,
         ):
-            filler.fill(test_file, {"Colors": "Red"}, output_file, validate=False)
+            filler.fill(test_file, {"Colors": "Red"}, output_file)
             mock_sync.assert_called_once()
 
 

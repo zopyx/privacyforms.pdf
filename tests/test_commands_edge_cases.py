@@ -11,11 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from privacyforms_pdf.cli import main
-from privacyforms_pdf.commands.pdf_verify_data import (
-    _check_json_depth,
-    _require_json_object,
-    _safe_json_loads,
-)
+from privacyforms_pdf.json_utils import check_json_depth, require_json_object, safe_json_loads
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_PDF = REPO_ROOT / "samples" / "FilledForm.pdf"
@@ -60,23 +56,23 @@ class TestVerifyDataEdgeCases:
             _check_json_size(path)
 
     def test_check_json_depth_exceeded(self) -> None:
-        """It raises ClickException when JSON nesting exceeds the limit."""
+        """It raises ValueError when JSON nesting exceeds the limit."""
         nested = {"a": {"b": {"c": {}}}}
-        with pytest.raises(click.ClickException, match="depth"):
-            _check_json_depth(nested, depth=0, max_depth=2)
+        with pytest.raises(ValueError, match="depth"):
+            check_json_depth(nested, depth=0, max_depth=2)
 
     def test_safe_json_loads_recursion_error(self) -> None:
-        """It raises ClickException on RecursionError from json.loads."""
+        """It raises ValueError on RecursionError from json.loads."""
         with (
-            patch("json.loads", side_effect=RecursionError("too deep")),
-            pytest.raises(click.ClickException, match="deeply nested"),
+            patch("privacyforms_pdf.json_utils.json.loads", side_effect=RecursionError("too deep")),
+            pytest.raises(ValueError, match="deeply nested"),
         ):
-            _safe_json_loads("{}")
+            safe_json_loads("{}")
 
     def test_require_json_object_not_mapping(self) -> None:
-        """It raises ClickException when the top-level JSON is not an object."""
-        with pytest.raises(click.ClickException, match="top-level object"):
-            _require_json_object([1, 2, 3])
+        """It raises ValueError when the top-level JSON is not an object."""
+        with pytest.raises(ValueError, match="top-level object"):
+            require_json_object([1, 2, 3])
 
 
 class TestVerifyJsonEdgeCases:

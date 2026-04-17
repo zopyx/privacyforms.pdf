@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pypdf import PdfReader, PdfWriter
 
 from privacyforms_pdf.filler import FormFiller
+from privacyforms_pdf.json_utils import load_json_object
 from privacyforms_pdf.models import (
     FieldNotFoundError,
     FormValidationError,
@@ -30,9 +29,6 @@ if TYPE_CHECKING:
     from privacyforms_pdf.schema import PDFField, PDFRepresentation
 
 logger = logging.getLogger(__name__)
-
-_MAX_JSON_SIZE = 10 * 1024 * 1024  # 10 MB
-_MAX_JSON_DEPTH = 50
 
 # Re-export all public names for backwards compatibility
 __all__ = [
@@ -130,68 +126,15 @@ class PDFFormExtractor:
         field = self.get_field_by_name(pdf_path, field_name)
         return None if field is None else field.value
 
-    @staticmethod
-    def _check_json_size(path: Path, max_size: int = _MAX_JSON_SIZE) -> None:
-        """Raise ValueError if *path* exceeds the maximum allowed size."""
-        size = path.stat().st_size
-        if size > max_size:
-            raise ValueError(
-                f"JSON file too large: {path.name} ({size} bytes). "
-                f"Maximum allowed is {max_size} bytes."
-            )
-
-    @classmethod
-    def _check_json_depth(
-        cls, obj: object, depth: int = 0, max_depth: int = _MAX_JSON_DEPTH
-    ) -> None:
-        """Raise ValueError if *obj* exceeds the configured nesting depth."""
-        if depth > max_depth:
-            raise ValueError(f"JSON structure exceeds maximum nesting depth of {max_depth}")
-        if isinstance(obj, dict):
-            for value in obj.values():
-                cls._check_json_depth(value, depth + 1, max_depth)
-        elif isinstance(obj, list):
-            for item in obj:
-                cls._check_json_depth(item, depth + 1, max_depth)
-
-    @classmethod
-    def _safe_json_loads(cls, text: str) -> object:
-        """Parse JSON with size and depth protections."""
-        try:
-            result = json.loads(text)
-        except RecursionError as exc:
-            raise ValueError(
-                f"JSON structure is too deeply nested (maximum depth {_MAX_JSON_DEPTH})"
-            ) from exc
-        cls._check_json_depth(result)
-        return result
-
-    @staticmethod
-    def _require_json_object(data: object) -> dict[str, Any]:
-        """Require a top-level JSON object for fill data."""
-        if not isinstance(data, Mapping):
-            raise ValueError(
-                "Form data JSON must be a top-level object with field names or field IDs as keys"
-            )
-        return {str(key): value for key, value in data.items()}
-
     @classmethod
     def load_form_data_json(cls, json_path: str | Path) -> dict[str, Any]:
         """Load a form-data JSON file with basic size and depth hardening."""
-        path = Path(json_path)
-        if not path.exists():
-            raise FileNotFoundError(f"JSON file not found: {path}")
-        if not path.is_file():
-            raise FileNotFoundError(f"Path is not a file: {path}")
-
-        cls._check_json_size(path)
-        text = path.read_text(encoding="utf-8")
-        return cls._require_json_object(cls._safe_json_loads(text))
+        return load_json_object(json_path)
 
     def _normalize_form_data_keys(
         self,
         pdf_path: Path,
-        form_data: Mapping[str, Any],
+        form_data: dict[str, Any],
         *,
         key_mode: Literal["name", "id", "auto"],
     ) -> tuple[dict[str, Any], list[str]]:
@@ -340,7 +283,7 @@ class PDFFormExtractor:
             if errors:
                 raise FormValidationError("Form data validation failed", errors)
 
-        return self._filler.fill(pdf_path, normalized_form_data, output_path, validate=False)
+        return self._filler.fill(pdf_path, normalized_form_data, output_path)
 
     def fill_form_from_json(
         self,

@@ -375,9 +375,6 @@ class FormFiller:
         pdf_path: str | Path,
         form_data: dict[str, Any],
         output_path: str | Path | None = None,
-        *,
-        validate: bool = True,
-        validator: Any | None = None,
     ) -> Path:
         """Fill a PDF form with data.
 
@@ -386,8 +383,6 @@ class FormFiller:
             form_data: The form data to fill.
             output_path: Optional output path. If not provided, the input PDF
                         is modified in place.
-            validate: If True, validates form data before filling.
-            validator: Optional validator object with validate_form_data method.
 
         Returns:
             Path to the filled PDF.

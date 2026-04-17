@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+from demo.fill_sample import generate_sample_value
 from privacyforms_pdf.cli import main
 from privacyforms_pdf.extractor import (
     FormValidationError,
@@ -12,11 +15,14 @@ from privacyforms_pdf.extractor import (
     PDFFormExtractor,
     PDFFormNotFoundError,
 )
+from privacyforms_pdf.parser import parse_pdf
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from click.testing import CliRunner
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SAMPLE_PDF = REPO_ROOT / "samples" / "FilledForm.pdf"
 
 
 class TestFillFormCommand:
@@ -253,3 +259,46 @@ class TestFillFormCommand:
             )
             assert result.exit_code != 0
             assert "validation failed" in result.output.lower()
+
+    def test_fill_form_real_sample_with_id_keys(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form end to end with a real sample PDF and ID-keyed data."""
+        representation = parse_pdf(SAMPLE_PDF)
+        fill_data: dict[str, str | bool] = {}
+        expected_by_name: dict[str, str | bool] = {}
+
+        for field in representation.fields:
+            if field.type not in {"textfield", "textarea", "datefield", "checkbox"}:
+                continue
+            value = generate_sample_value(field.type, field.name)
+            fill_data[field.id] = value
+            expected_by_name[field.name] = value
+            if len(fill_data) == 3:
+                break
+
+        assert fill_data
+
+        json_file = tmp_path / "data.json"
+        json_file.write_text(json.dumps(fill_data), encoding="utf-8")
+        output_file = tmp_path / "filled.pdf"
+
+        result = runner.invoke(
+            main,
+            [
+                "fill-form",
+                str(SAMPLE_PDF),
+                str(json_file),
+                "-o",
+                str(output_file),
+                "--field-keys",
+                "id",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert output_file.exists()
+
+        filled_representation = parse_pdf(output_file)
+        for field_name, expected_value in expected_by_name.items():
+            field = filled_representation.get_field_by_name(field_name)
+            assert field is not None
+            assert field.value == expected_value

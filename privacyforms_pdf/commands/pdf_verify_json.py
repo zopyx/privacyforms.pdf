@@ -7,18 +7,17 @@ from pathlib import Path
 import click
 
 from ..hooks import hookimpl
+from ..json_utils import MAX_JSON_SIZE
+from ..json_utils import check_json_size as _base_check_json_size
 from ..schema import PDFRepresentation
 
-_MAX_JSON_SIZE = 10 * 1024 * 1024  # 10 MB
 
-
-def _check_json_size(path: Path, max_size: int = _MAX_JSON_SIZE) -> None:
+def _check_json_size(path: Path, max_size: int = MAX_JSON_SIZE) -> None:
     """Raise ClickException if *path* exceeds *max_size* bytes."""
-    size = path.stat().st_size
-    if size > max_size:
-        raise click.ClickException(
-            f"JSON file too large: {path.name} ({size} bytes). Maximum allowed is {max_size} bytes."
-        )
+    try:
+        _base_check_json_size(path, max_size=max_size)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @click.command(name="verify-json")
