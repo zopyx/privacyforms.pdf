@@ -19,7 +19,7 @@ from pypdf.generic import (
 from privacyforms_pdf.parser import get_field_options, get_field_type
 
 if TYPE_CHECKING:
-    from pypdf import PdfWriter
+    from pypdf import PdfReader, PdfWriter
 
 
 class FormFiller:
@@ -123,10 +123,12 @@ class FormFiller:
                 parent_name = parent_annotation.get("/T")
 
                 matched_field_name = None
-                for field_name in field_values:
-                    if field_name in (qualified_name, annotation_name, parent_name):
-                        matched_field_name = field_name
-                        break
+                if qualified_name in field_values:
+                    matched_field_name = qualified_name
+                elif annotation_name in field_values:
+                    matched_field_name = annotation_name
+                elif parent_name in field_values:
+                    matched_field_name = parent_name
                 if matched_field_name is None:
                     continue
 
@@ -175,10 +177,12 @@ class FormFiller:
                 parent_name = parent_annotation.get("/T")
 
                 matched_field_name = None
-                for field_name in field_values:
-                    if field_name in (qualified_name, annotation_name, parent_name):
-                        matched_field_name = field_name
-                        break
+                if qualified_name in field_values:
+                    matched_field_name = qualified_name
+                elif annotation_name in field_values:
+                    matched_field_name = annotation_name
+                elif parent_name in field_values:
+                    matched_field_name = parent_name
                 if matched_field_name is None:
                     continue
 
@@ -301,7 +305,11 @@ class FormFiller:
                 continue
 
             for annotation_ref in annotations:
-                annotation = annotation_ref.get_object()
+                annotation = (
+                    annotation_ref.get_object()
+                    if hasattr(annotation_ref, "get_object")
+                    else annotation_ref
+                )
                 if annotation.get("/Subtype", "") != "/Widget":
                     continue
 
@@ -309,17 +317,23 @@ class FormFiller:
                     parent_annotation = annotation
                 else:
                     parent_ref = annotation.get("/Parent")
-                    parent_annotation = parent_ref.get_object() if parent_ref else annotation
+                    parent_annotation = (
+                        parent_ref.get_object()
+                        if parent_ref and hasattr(parent_ref, "get_object")
+                        else (parent_ref or annotation)
+                    )
 
                 qualified_name = writer._get_qualified_field_name(parent_annotation)
                 annotation_name = annotation.get("/T")
                 parent_name = parent_annotation.get("/T")
 
                 matched_field_name = None
-                for field_name in field_values:
-                    if field_name in (qualified_name, annotation_name, parent_name):
-                        matched_field_name = field_name
-                        break
+                if qualified_name in field_values:
+                    matched_field_name = qualified_name
+                elif annotation_name in field_values:
+                    matched_field_name = annotation_name
+                elif parent_name in field_values:
+                    matched_field_name = parent_name
                 if matched_field_name is None:
                     continue
 
@@ -332,7 +346,9 @@ class FormFiller:
                         annotation[NameObject("/V")] = text_value
                         radio_field_values[matched_field_name] = value
                     else:
-                        button_value = NameObject(value if value.startswith("/") else f"/{value}")
+                        button_value = NameObject(
+                            value if value.startswith("/") else (f"/{value}" if value else "/Off")
+                        )
                         parent_annotation[NameObject("/V")] = button_value
                         annotation[NameObject("/V")] = button_value
                         annotation[NameObject("/AS")] = button_value
@@ -344,11 +360,26 @@ class FormFiller:
         if radio_field_values:
             self._sync_radio_button_states(writer, radio_field_values)
 
+        # Build field-type lookup in one pass to avoid O(n²) scans
+        field_type_map: dict[str, str] = {}
+        for page in writer.pages:
+            annotations = page.get("/Annots", [])
+            for annotation_ref in annotations:
+                annotation, parent_annotation = self._get_widget_annotation(annotation_ref)
+                if annotation.get("/Subtype", "") != "/Widget":
+                    continue
+                qualified_name = writer._get_qualified_field_name(parent_annotation)
+                annotation_name = annotation.get("/T")
+                parent_name = parent_annotation.get("/T")
+                ftype = get_field_type(parent_annotation)
+                for name in (qualified_name, annotation_name, parent_name):
+                    if name is not None:
+                        field_type_map[name] = ftype
+
         listbox_field_values = {
             field_name: value
             for field_name, value in field_values.items()
-            if get_field_type(self.get_field_by_name_from_writer(writer, field_name) or {})
-            == "listbox"
+            if field_type_map.get(field_name) == "listbox"
         }
         if listbox_field_values:
             self._sync_listbox_selection_indexes(writer, listbox_field_values)
@@ -377,6 +408,7 @@ class FormFiller:
         pdf_path: str | Path,
         form_data: dict[str, Any],
         output_path: str | Path | None = None,
+        reader: PdfReader | None = None,
     ) -> Path:
         """Fill a PDF form with data.
 
@@ -385,6 +417,7 @@ class FormFiller:
             form_data: The form data to fill.
             output_path: Optional output path. If not provided, the input PDF
                         is modified in place.
+            reader: Optional pre-constructed PdfReader to avoid re-parsing.
 
         Returns:
             Path to the filled PDF.
@@ -393,7 +426,10 @@ class FormFiller:
 
         pdf_path = Path(pdf_path)
 
-        reader = PdfReader(str(pdf_path))
+        own_reader = reader is None
+        if own_reader:
+            reader = PdfReader(str(pdf_path))
+        assert reader is not None
         fields = reader.get_fields() or {}
         writer = PdfWriter()
         writer.append(reader)
@@ -402,6 +438,8 @@ class FormFiller:
         radio_field_values: dict[str, str] = {}
         listbox_field_values: dict[str, str] = {}
         for field_name, value in form_data.items():
+            if value is None:
+                continue
             str_value = ("/Yes" if value else "/Off") if isinstance(value, bool) else str(value)
             field_values[field_name] = str_value
             field_type = get_field_type(fields.get(field_name, {}))
@@ -437,5 +475,8 @@ class FormFiller:
             tmp.flush()
             os.fsync(tmp.fileno())
         os.replace(tmp.name, output_file)
+
+        if own_reader:
+            reader.close()
 
         return output_file

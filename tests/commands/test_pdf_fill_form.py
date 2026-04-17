@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from demo.fill_sample import generate_sample_value
 from privacyforms_pdf.cli import main
@@ -231,7 +231,9 @@ class TestFillFormCommand:
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
-        with patch.object(PDFFormService, "has_form", return_value=False):
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {}
+        with patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader):
             result = runner.invoke(
                 main,
                 ["fill-form", str(pdf_file), str(json_file), "--no-validate"],

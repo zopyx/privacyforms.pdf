@@ -22,8 +22,6 @@ from privacyforms_pdf.utils import (
     _install_pypdf_warning_filter,
     _PypdfWarningFilter,
     cluster_y_positions,
-    get_available_geometry_backends,
-    has_geometry_support,
 )
 
 if TYPE_CHECKING:
@@ -39,8 +37,6 @@ __all__ = [
     "PDFFormNotFoundError",
     "PDFFormService",
     "cluster_y_positions",
-    "get_available_geometry_backends",
-    "has_geometry_support",
     "_install_pypdf_warning_filter",
     "_PypdfWarningFilter",
 ]
@@ -149,6 +145,7 @@ class PDFFormService:
         form_data: dict[str, Any],
         *,
         key_mode: Literal["name", "id", "auto"],
+        representation: PDFRepresentation | None = None,
     ) -> tuple[dict[str, Any], list[str]]:
         """Normalize input data keys to PDF field names."""
         normalized: dict[str, Any] = {}
@@ -157,7 +154,8 @@ class PDFFormService:
         if key_mode == "name":
             return {str(key): value for key, value in form_data.items()}, errors
 
-        representation = self.extract(pdf_path)
+        if representation is None:
+            representation = self.extract(pdf_path)
         id_to_name = {field.id: field.name for field in representation.fields}
         known_names = {field.name for field in representation.fields}
 
@@ -219,6 +217,8 @@ class PDFFormService:
         strict: bool = False,
         allow_extra_fields: bool = False,
         key_mode: Literal["name", "id", "auto"] = "name",
+        reader: PdfReader | None = None,
+        representation: PDFRepresentation | None = None,
     ) -> list[str]:
         """Validate form data against PDF form fields."""
         pdf_path = Path(pdf_path)
@@ -229,15 +229,19 @@ class PDFFormService:
             pdf_path,
             form_data,
             key_mode=key_mode,
+            representation=representation,
         )
         errors.extend(normalization_errors)
 
-        try:
-            reader = PdfReader(str(pdf_path))
-        except Exception as exc:
-            errors.append(f"Could not read PDF: {exc}")
-            return errors
+        own_reader = reader is None
+        if own_reader:
+            try:
+                reader = PdfReader(str(pdf_path))
+            except Exception as exc:
+                errors.append(f"Could not read PDF: {exc}")
+                return errors
 
+        assert reader is not None
         fields = reader.get_fields() or {}
         fields_by_name: dict[str, dict[str, Any]] = dict(fields)
 
@@ -279,23 +283,39 @@ class PDFFormService:
         pdf_path = Path(pdf_path)
         validate_pdf_path(pdf_path)
 
-        if not self.has_form(pdf_path):
-            raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
+        reader = PdfReader(str(pdf_path))
+        try:
+            fields = reader.get_fields()
+            if not fields:
+                raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
-        normalized_form_data, normalization_errors = self._normalize_form_data_keys(
-            pdf_path,
-            form_data,
-            key_mode=key_mode,
-        )
-        if normalization_errors:
-            raise FormValidationError("Form data key normalization failed", normalization_errors)
+            representation = parse_pdf(pdf_path, reader=reader)
 
-        if validate:
-            errors = self.validate_form_data(pdf_path, form_data, key_mode=key_mode)
-            if errors:
-                raise FormValidationError("Form data validation failed", errors)
+            normalized_form_data, normalization_errors = self._normalize_form_data_keys(
+                pdf_path,
+                form_data,
+                key_mode=key_mode,
+                representation=representation,
+            )
+            if normalization_errors:
+                raise FormValidationError(
+                    "Form data key normalization failed", normalization_errors
+                )
 
-        return self._filler.fill(pdf_path, normalized_form_data, output_path)
+            if validate:
+                errors = self.validate_form_data(
+                    pdf_path,
+                    form_data,
+                    key_mode=key_mode,
+                    reader=reader,
+                    representation=representation,
+                )
+                if errors:
+                    raise FormValidationError("Form data validation failed", errors)
+
+            return self._filler.fill(pdf_path, normalized_form_data, output_path, reader=reader)
+        finally:
+            reader.close()
 
     def fill_form_from_json(
         self,

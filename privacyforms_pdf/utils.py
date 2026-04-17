@@ -105,20 +105,4 @@ def _install_pypdf_warning_filter() -> None:
             logger.addFilter(_PypdfWarningFilter())
 
 
-def get_available_geometry_backends() -> list[str]:
-    """Return list of available geometry backends.
 
-    Returns:
-        List of backend names that can be used.
-        For pypdf version, always returns ["pypdf"].
-    """
-    return ["pypdf"]
-
-
-def has_geometry_support() -> bool:
-    """Check if any geometry extraction backend is available.
-
-    Returns:
-        True (pypdf always supports geometry extraction).
-    """
-    return True

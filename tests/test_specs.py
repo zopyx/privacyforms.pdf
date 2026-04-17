@@ -297,7 +297,7 @@ class TestPDFParserIntegration:
 
         # Verify expected field types
         names = {f.name: f.type for f in result.fields}
-        assert names.get("Candidate Name") == "datefield"
+        assert names.get("Candidate Name") == "textfield"
         assert names.get("Special skills") == "textarea"
         assert names.get("Signature") == "signature"
         assert names.get("Diploma or GED") == "radiobuttongroup"

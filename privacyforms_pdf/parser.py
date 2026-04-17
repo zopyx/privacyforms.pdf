@@ -94,19 +94,17 @@ def _parse_field_flags(raw: int | None) -> FieldFlags:
     )
 
 
+_DATE_KEYWORDS_RE = re.compile(r"\b(date|dob|birth|hired)\b", re.IGNORECASE)
+
+
 def _is_date_field(name: str, value: str | None) -> bool:
     """Heuristic to detect date fields from name and value patterns."""
-    date_keywords = [
-        "date",
-        "start date",
-        "end date",
-        "dob",
-        "birth",
-        "hired",
-    ]
     lower_name = name.lower()
-    if any(kw in lower_name for kw in date_keywords):
+    if _DATE_KEYWORDS_RE.search(lower_name):
         return True
+    for phrase in ("start date", "end date", "date of birth", "birth date"):
+        if phrase in lower_name:
+            return True
     return bool(
         value
         and (
@@ -290,8 +288,6 @@ def get_field_type(field: dict[str, Any]) -> str:
         ft = field.get("/Type")
 
     if ft == "/Tx":
-        if "/AA" in field or "/DV" in field:
-            return "datefield"
         raw_flags = field.get("/Ff")
         flags_int = int(raw_flags) if raw_flags is not None else None
         field_flags = _parse_field_flags(flags_int)
@@ -473,7 +469,8 @@ def parse_pdf(
 
     if len(fields) > _MAX_FIELDS:
         raise ValueError(
-            f"PDF contains too many fields: {len(fields)}. Maximum allowed is {_MAX_FIELDS}."
+            f"PDF contains too many fields: {len(fields)}. "
+            f"Maximum allowed is {_MAX_FIELDS}."
         )
 
     for name, field_ref in fields.items():
@@ -513,11 +510,11 @@ def parse_pdf(
         if field_type == "checkbox":
             value = _normalize_value(raw_value)
             default_value = _normalize_value(raw_default)
-            # Ensure bool type
+            # Ensure bool type (case-insensitive)
             if isinstance(value, str):
-                value = value not in {"Off", "No", "False", ""}
+                value = value.strip().lower() not in {"off", "no", "false", ""}
             if isinstance(default_value, str):
-                default_value = default_value not in {"Off", "No", "False", ""}
+                default_value = default_value.strip().lower() not in {"off", "no", "false", ""}
         elif field_type == "radiobuttongroup":
             value = _strip_pdf_string(raw_value)
             default_value = _strip_pdf_string(raw_default)
@@ -561,7 +558,7 @@ def parse_pdf(
 
         # Omit field_flags entirely when no flags are set
         effective_flags = field_flags if flags_int is not None else None
-        if effective_flags is not None and not effective_flags.model_dump():
+        if effective_flags is not None and flags_int == 0:
             effective_flags = None
 
         # Build PDFField

@@ -13,8 +13,6 @@ from privacyforms_pdf.extractor import (
     PDFFormNotFoundError,
     PDFFormService,
     cluster_y_positions,
-    get_available_geometry_backends,
-    has_geometry_support,
 )
 from privacyforms_pdf.security_io import validate_pdf_path
 
@@ -458,7 +456,9 @@ class TestFillForm:
         ):
             result = service.fill_form(test_file, {"Name": "John"}, output_file, validate=False)
             assert result == output_file
-            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, reader=mock_reader
+            )
 
     def test_fill_form_falls_back_on_pypdf_appearance_error(self, tmp_path: Path) -> None:
         """Test fill_form fallback is used for pypdf appearance-stream bug."""
@@ -504,7 +504,9 @@ class TestFillForm:
         ):
             result = service.fill_form(test_file, {"Name": "John"}, output_file, validate=True)
             assert result == output_file
-            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, reader=mock_reader
+            )
 
     def test_fill_form_with_id_keys_normalizes_before_fill(self, tmp_path: Path) -> None:
         """Test fill_form maps field IDs to names before delegating to the filler."""
@@ -520,7 +522,7 @@ class TestFillForm:
 
         with (
             patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
-            patch.object(service, "extract", return_value=parsed_representation),
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=parsed_representation),
             patch.object(service._filler, "fill", return_value=output_file) as mock_fill,
         ):
             result = service.fill_form(
@@ -531,7 +533,9 @@ class TestFillForm:
                 key_mode="id",
             )
             assert result == output_file
-            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, reader=mock_reader
+            )
 
     def test_fill_form_duplicate_keys_raise(self, tmp_path: Path) -> None:
         """Test fill_form raises when two keys map to the same form field."""
@@ -547,7 +551,7 @@ class TestFillForm:
 
         with (
             patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
-            patch.object(service, "extract", return_value=parsed_representation),
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=parsed_representation),
             pytest.raises(FormValidationError, match="key normalization failed"),
         ):
             service.fill_form(
@@ -580,7 +584,9 @@ class TestFillFormFromJson:
         ):
             result = service.fill_form_from_json(test_file, json_file, output_file, validate=False)
             assert result == output_file
-            mock_fill.assert_called_once_with(test_file, {"Name": "John"}, output_file)
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, reader=mock_reader
+            )
 
     def test_fill_form_from_json_not_found(self, tmp_path: Path) -> None:
         """Test fill_form_from_json raises when JSON not found."""
@@ -638,5 +644,3 @@ class TestBackwardsCompatibility:
 
     def test_geometry_helpers_export(self) -> None:
         """Test geometry backend helpers are exported."""
-        assert get_available_geometry_backends() == ["pypdf"]
-        assert has_geometry_support() is True

@@ -8,8 +8,6 @@ from privacyforms_pdf.utils import (
     _install_pypdf_warning_filter,
     _PypdfWarningFilter,
     cluster_y_positions,
-    get_available_geometry_backends,
-    has_geometry_support,
 )
 
 
@@ -61,13 +59,3 @@ class TestPypdfWarningFilter:
         assert sum(1 for f in logger.filters if isinstance(f, _PypdfWarningFilter)) == 1
 
 
-class TestGeometryHelpers:
-    """Tests for geometry helper functions."""
-
-    def test_get_available_geometry_backends(self) -> None:
-        """It always returns a list containing 'pypdf'."""
-        assert get_available_geometry_backends() == ["pypdf"]
-
-    def test_has_geometry_support(self) -> None:
-        """It always reports geometry support as available."""
-        assert has_geometry_support() is True

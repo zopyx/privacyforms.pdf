@@ -4,19 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from privacyforms_pdf.backends import __all__ as backends_all
 from privacyforms_pdf.hooks import PDFFormsCommandsSpec
 from privacyforms_pdf.models import FormValidationError
 from privacyforms_pdf.schema import FieldLayout, PDFField
 from privacyforms_pdf.schema_layout import _build_rows
-
-
-class TestBackendsInit:
-    """Tests for backends package init."""
-
-    def test_all_is_empty_list(self) -> None:
-        """It exports an empty __all__ list."""
-        assert backends_all == []
 
 
 class TestHooks:

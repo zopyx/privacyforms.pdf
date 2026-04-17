@@ -18,7 +18,6 @@ from .schema import (
     PDFRepresentation,
     RowGroup,
 )
-from .utils import _install_pypdf_warning_filter, _PypdfWarningFilter
 
 __version__ = "0.2.0"
 __all__ = [
@@ -42,7 +41,4 @@ __all__ = [
     "PDFFormNotFoundError",
     "FormValidationError",
     "FieldNotFoundError",
-    # Internal helpers (re-exported for tests)
-    "_install_pypdf_warning_filter",
-    "_PypdfWarningFilter",
 ]

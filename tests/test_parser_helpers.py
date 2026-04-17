@@ -276,10 +276,10 @@ class TestGetFieldType:
         field = {"/Type": "/Sig"}
         assert get_field_type(field) == "signature"
 
-    def test_tx_datefield_via_aa(self) -> None:
-        """It detects datefields via /AA or /DV presence."""
+    def test_tx_textfield_with_aa(self) -> None:
+        """It does not over-detect datefields from /AA or /DV presence."""
         field = {"/FT": "/Tx", "/AA": {}}
-        assert get_field_type(field) == "datefield"
+        assert get_field_type(field) == "textfield"
 
     def test_tx_textarea(self) -> None:
         """It detects textarea via the multiline flag."""
