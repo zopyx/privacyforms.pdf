@@ -568,7 +568,7 @@ def main(pdf_file: Path, output_json: Path | None, by_id: bool) -> None:
     """Parse PDF_FILE into JSON and write it to OUTPUT_JSON (default: <pdf-stem>.json)."""
     output_path = output_json if output_json is not None else pdf_file.with_suffix(".json")
 
-    representation = parse_pdf(pdf_file)
+    representation = extract_pdf_form(pdf_file)
     json_text = representation.to_compact_json(indent=2)
 
     output_path.write_text(json_text, encoding="utf-8")
