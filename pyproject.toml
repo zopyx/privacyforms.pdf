@@ -21,6 +21,7 @@ pdf-forms = "privacyforms_pdf.cli:main"
 fill_form = "privacyforms_pdf.commands.pdf_fill_form"
 info = "privacyforms_pdf.commands.pdf_info"
 parse = "privacyforms_pdf.commands.pdf_parse"
+schema = "privacyforms_pdf.commands.pdf_schema"
 verify_data = "privacyforms_pdf.commands.pdf_verify_data"
 verify_json = "privacyforms_pdf.commands.pdf_verify_json"
 

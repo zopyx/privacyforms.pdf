@@ -130,6 +130,18 @@ class PDFFormService:
         """Load a form-data JSON file with basic size and depth hardening."""
         return load_json_object(json_path)
 
+    @staticmethod
+    def get_json_schema() -> dict[str, Any]:
+        """Return the JSON Schema for the canonical PDFRepresentation model.
+
+        Returns:
+            A dict representing the JSON Schema (draft 2020-12) of
+            :class:`~privacyforms_pdf.schema.PDFRepresentation`.
+        """
+        from privacyforms_pdf.schema import PDFRepresentation
+
+        return PDFRepresentation.model_json_schema()
+
     def _normalize_form_data_keys(
         self,
         pdf_path: Path,

@@ -154,6 +154,13 @@ class TestExtractFacade:
         with patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader):
             assert service.has_form(test_file) is False
 
+    def test_get_json_schema_returns_dict(self) -> None:
+        """Test get_json_schema returns the PDFRepresentation JSON schema."""
+        schema = PDFFormService.get_json_schema()
+        assert isinstance(schema, dict)
+        assert schema.get("title") == "PDFRepresentation"
+        assert "$defs" in schema
+
 
 class TestGetFieldHelpers:
     """Tests for static field helper methods."""
