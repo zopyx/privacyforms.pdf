@@ -103,7 +103,7 @@ class RowGroup(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fields: list["PDFField"] = Field(
+    fields: list[PDFField] = Field(
         default_factory=list,
         description="Ordered list of PDF fields appearing in this row.",
     )
