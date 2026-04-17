@@ -17,15 +17,26 @@ if TYPE_CHECKING:
 from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
-from .pdf_schema import (
-    ChoiceOption,
-    FieldFlags,
-    FieldLayout,
-    PDFField,
-    PDFFieldType,
-    PDFRepresentation,
-    RowGroup,
-)
+try:
+    from .pdf_schema import (
+        ChoiceOption,
+        FieldFlags,
+        FieldLayout,
+        PDFField,
+        PDFFieldType,
+        PDFRepresentation,
+        RowGroup,
+    )
+except ImportError:
+    from pdf_schema import (
+        ChoiceOption,
+        FieldFlags,
+        FieldLayout,
+        PDFField,
+        PDFFieldType,
+        PDFRepresentation,
+        RowGroup,
+    )
 
 # ---------------------------------------------------------------------------
 # Layout helpers
