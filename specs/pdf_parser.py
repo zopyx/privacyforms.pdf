@@ -453,11 +453,19 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
             kid_rects: list[list[float]] = []
             kid_pages: list[int] = []
             for kid in kids:
-                ref_key = (kid.idnum, kid.generation)
-                if ref_key in ref_map:
-                    p_idx, k_rect = ref_map[ref_key]
-                    kid_pages.append(p_idx)
-                    if k_rect:
+                if hasattr(kid, "idnum") and hasattr(kid, "generation"):
+                    ref_key = (kid.idnum, kid.generation)
+                    if ref_key in ref_map:
+                        p_idx, k_rect = ref_map[ref_key]
+                        kid_pages.append(p_idx)
+                        if k_rect:
+                            kid_rects.append([float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])])
+                        continue
+                # Fallback for raw DictionaryObject kids
+                ko = kid.get_object() if hasattr(kid, "get_object") else kid
+                if isinstance(ko, DictionaryObject):
+                    k_rect = ko.get("/Rect")
+                    if k_rect and len(k_rect) == 4:
                         kid_rects.append([float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])])
             if kid_pages:
                 page_index = kid_pages[0]
