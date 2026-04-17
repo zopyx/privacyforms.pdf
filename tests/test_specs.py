@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
 from pypdf.generic import (
     ArrayObject,
     DictionaryObject,
@@ -22,7 +21,6 @@ from specs.pdf_parser import main, parse_pdf
 from specs.pdf_schema import (
     ChoiceOption,
     FieldFlags,
-    FieldLayout,
     PDFField,
     PDFRepresentation,
     RowGroup,
@@ -54,12 +52,12 @@ class TestPDFSchemaValidation:
     def test_extra_field_rejected(self) -> None:
         """Test extra fields are rejected in strict mode."""
         with pytest.raises(ValueError):
-            PDFField(name="Name", id="f-1", type="textfield", unknown_field="x")
+            PDFField(name="Name", id="f-1", type="textfield", unknown_field="x")  # type: ignore[call-arg]
 
     def test_coercion_rejected_for_id(self) -> None:
         """Test integer ids are not coerced to strings."""
         with pytest.raises(ValueError):
-            PDFField(name="Name", id=123, type="textfield")
+            PDFField(name="Name", id=123, type="textfield")  # type: ignore[arg-type]
 
     def test_datefield_only_allows_format(self) -> None:
         """Test format is only valid on datefield."""

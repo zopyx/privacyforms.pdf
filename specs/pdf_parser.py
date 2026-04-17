@@ -3,9 +3,8 @@
 
 from __future__ import annotations
 
-import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +27,7 @@ try:
         RowGroup,
     )
 except ImportError:
-    from pdf_schema import (
+    from pdf_schema import (  # type: ignore[import-not-found]
         ChoiceOption,
         FieldFlags,
         FieldLayout,
@@ -41,6 +40,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Layout helpers
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _RawFieldInfo:
@@ -111,16 +111,23 @@ def _parse_field_flags(raw: int | None) -> FieldFlags:
 def _is_date_field(name: str, value: str | None) -> bool:
     """Heuristic to detect date fields from name and value patterns."""
     date_keywords = [
-        "date", "start date", "end date", "dob", "birth", "hired",
+        "date",
+        "start date",
+        "end date",
+        "dob",
+        "birth",
+        "hired",
     ]
     lower_name = name.lower()
     if any(kw in lower_name for kw in date_keywords):
         return True
-    if value and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        return True
-    if value and re.fullmatch(r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}", value):
-        return True
-    return False
+    return bool(
+        value
+        and (
+            re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+            or re.fullmatch(r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}", value)
+        )
+    )
 
 
 def _strip_pdf_string(value: object) -> str | None:
@@ -169,7 +176,7 @@ def _get_appearance_states(widget_dict: DictionaryObject) -> list[str]:
     no = n.get_object() if hasattr(n, "get_object") else n
     if not isinstance(no, DictionaryObject):
         return []
-    for key in no.keys():
+    for key in no:
         key_str = str(key)
         if key_str.startswith("/"):
             key_str = key_str[1:]
@@ -315,7 +322,9 @@ def _build_layout(
 
 def _collect_annotation_info(
     pdf_path: Path | str,
-) -> tuple[dict[str, tuple[int, list[float] | None]], dict[tuple[int, int], tuple[int, list[float] | None]]]:
+) -> tuple[
+    dict[str, tuple[int, list[float] | None]], dict[tuple[int, int], tuple[int, list[float] | None]]
+]:
     """Map widget annotations by field name and by indirect reference.
 
     Returns:
@@ -432,7 +441,8 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
             default_value = _strip_pdf_string(raw_default)
         elif field_type in {"combobox", "listbox"}:
             if field_flags.multi_select and isinstance(raw_value, ArrayObject):
-                value = [_strip_pdf_string(v) for v in raw_value if _strip_pdf_string(v) is not None]
+                raw_list = [_strip_pdf_string(v) for v in raw_value]
+                value = [v for v in raw_list if v is not None]
             else:
                 value = _strip_pdf_string(raw_value)
             default_value = _strip_pdf_string(raw_default)
@@ -459,14 +469,23 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
                         p_idx, k_rect = ref_map[ref_key]
                         kid_pages.append(p_idx)
                         if k_rect:
-                            kid_rects.append([float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])])
+                            kid_rects.append(
+                                [
+                                    float(k_rect[0]),
+                                    float(k_rect[1]),
+                                    float(k_rect[2]),
+                                    float(k_rect[3]),
+                                ]
+                            )
                         continue
                 # Fallback for raw DictionaryObject kids
                 ko = kid.get_object() if hasattr(kid, "get_object") else kid
                 if isinstance(ko, DictionaryObject):
                     k_rect = ko.get("/Rect")
                     if k_rect and len(k_rect) == 4:
-                        kid_rects.append([float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])])
+                        kid_rects.append(
+                            [float(k_rect[0]), float(k_rect[1]), float(k_rect[2]), float(k_rect[3])]
+                        )
             if kid_pages:
                 page_index = kid_pages[0]
             if kid_rects:
@@ -517,6 +536,11 @@ def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentat
     )
 
 
+def _get_layout_x(field: PDFField) -> int:
+    """Return the x coordinate of a field's layout, or 0 if unknown."""
+    return field.layout.x if field.layout is not None and field.layout.x is not None else 0
+
+
 def _build_rows(fields: Sequence[PDFField], y_tolerance: int = 15) -> list[RowGroup]:
     """Group fields into visual rows based on layout proximity."""
     # Group by page
@@ -533,22 +557,25 @@ def _build_rows(fields: Sequence[PDFField], y_tolerance: int = 15) -> list[RowGr
         pf.sort(key=lambda f: -(f.layout.y if f.layout else 0))
 
         current_row: list[PDFField] = []
-        current_y: int | None = None
+        current_y = 0
+        has_current = False
         for f in pf:
-            fy = f.layout.y if f.layout else 0
-            if current_y is None:
+            fy = f.layout.y if f.layout is not None and f.layout.y is not None else 0
+            if not has_current:
                 current_row = [f]
                 current_y = fy
-            elif abs(fy - current_y) <= y_tolerance:
+                has_current = True
+                continue
+            if abs(fy - current_y) <= y_tolerance:
                 current_row.append(f)
             else:
                 # Sort row by x ascending
-                current_row.sort(key=lambda fld: fld.layout.x if fld.layout else 0)
+                current_row.sort(key=_get_layout_x)
                 rows.append(RowGroup(fields=current_row, page_index=page_idx))
                 current_row = [f]
                 current_y = fy
         if current_row:
-            current_row.sort(key=lambda fld: fld.layout.x if fld.layout else 0)
+            current_row.sort(key=_get_layout_x)
             rows.append(RowGroup(fields=current_row, page_index=page_idx))
 
     return rows
@@ -556,9 +583,11 @@ def _build_rows(fields: Sequence[PDFField], y_tolerance: int = 15) -> list[RowGr
 
 def _print_rows(representation: PDFRepresentation, *, show_ids: bool = False) -> None:
     """Print a compact, human-readable overview of row groups and fields."""
-    click.echo(f"\nParsed {len(representation.fields)} fields into {len(representation.rows)} rows\n")
+    click.echo(
+        f"\nParsed {len(representation.fields)} fields into {len(representation.rows)} rows\n"
+    )
     for idx, row in enumerate(representation.rows, start=1):
-        labels = [field.id if show_ids else field.name for field in row.fields]
+        labels = [f.id if show_ids else f.name for f in row.fields]
         click.echo(f"Row {idx:2d} (page {row.page_index}): {', '.join(labels)}")
 
 

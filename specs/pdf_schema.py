@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 PDFFieldType = Literal[
     "textfield",
@@ -111,7 +118,9 @@ class RowGroup(BaseModel):
 
     fields: list[PDFField | str] = Field(
         default_factory=list,
-        description="Ordered list of PDF fields appearing in this row (may be IDs during deserialization).",
+        description=(
+            "Ordered list of PDF fields appearing in this row (may be IDs during deserialization)."
+        ),
     )
     page_index: int = Field(
         default=1,
@@ -397,15 +406,15 @@ class PDFRepresentation(BaseModel):
                     resolved.append(field_map[item])
                 else:
                     raise ValueError(f"rows contain invalid field reference: {item}")
-            row.fields = resolved  # type: ignore[assignment]
+            row.fields = resolved
 
-        row_ids = {field.id for row in self.rows for field in row.fields if isinstance(field, PDFField)}
+        row_ids = {
+            field.id for row in self.rows for field in row.fields if isinstance(field, PDFField)
+        }
         unknown_row_ids = sorted(row_ids - valid_ids)
         if unknown_row_ids:
             missing_ids = ", ".join(unknown_row_ids)
-            raise ValueError(
-                f"rows reference fields that are not present in fields: {missing_ids}"
-            )
+            raise ValueError(f"rows reference fields that are not present in fields: {missing_ids}")
 
         return self
 
