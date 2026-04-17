@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SAMPLES_DIR="${SCRIPT_DIR}/../samples"
+SAMPLES_DIR="${SCRIPT_DIR}/samples"
 
 echo "Converting PDF forms in ${SAMPLES_DIR} ..."
 
