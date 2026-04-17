@@ -466,8 +466,7 @@ def parse_pdf(
 
     if len(fields) > _MAX_FIELDS:
         raise ValueError(
-            f"PDF contains too many fields: {len(fields)}. "
-            f"Maximum allowed is {_MAX_FIELDS}."
+            f"PDF contains too many fields: {len(fields)}. Maximum allowed is {_MAX_FIELDS}."
         )
 
     for name, field_ref in fields.items():

@@ -57,5 +57,3 @@ class TestPypdfWarningFilter:
         _install_pypdf_warning_filter()
         logger = logging.getLogger("pypdf")
         assert sum(1 for f in logger.filters if isinstance(f, _PypdfWarningFilter)) == 1
-
-

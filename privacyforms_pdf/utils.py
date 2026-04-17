@@ -103,6 +103,3 @@ def _install_pypdf_warning_filter() -> None:
         logger = logging.getLogger(logger_name)
         if not any(isinstance(f, _PypdfWarningFilter) for f in logger.filters):
             logger.addFilter(_PypdfWarningFilter())
-
-
-
