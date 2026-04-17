@@ -282,13 +282,19 @@ class PDFField(BaseModel):
         ):
             raise ValueError("textarea_rows and textarea_cols are only valid for textarea")
 
-        if self.type in {"checkbox", "textfield", "textarea", "datefield", "signature"} and self.choices:
+        if (
+            self.type in {"checkbox", "textfield", "textarea", "datefield", "signature"}
+            and self.choices
+        ):
             raise ValueError(f"choices are not valid for {self.type}")
 
         if self.type == "checkbox" and self.value is not None and not isinstance(self.value, bool):
             raise ValueError("checkbox value must be bool or None")
 
-        if self.type in {"textfield", "textarea", "datefield", "signature"} and self.value is not None:
+        if (
+            self.type in {"textfield", "textarea", "datefield", "signature"}
+            and self.value is not None
+        ):
             if not isinstance(self.value, str):
                 raise ValueError(f"{self.type} value must be str or None")
 
