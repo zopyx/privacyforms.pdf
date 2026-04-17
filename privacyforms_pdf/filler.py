@@ -316,13 +316,13 @@ class FormFiller:
 
         # --- Build the content stream line by line ---
         lines: list[str] = [
-            "q",                     # save graphics state
-            "/Tx BMC",               # marked-content tag for text field
-            "q",                     # nested save for clipping
+            "q",  # save graphics state
+            "/Tx BMC",  # marked-content tag for text field
+            "q",  # nested save for clipping
             # Clip to the interior of the bbox (1-pt inset)
             f"1 1 {max(width - 2, 1):.3f} {max(height - 2, 1):.3f} re",
-            "W",                     # use rectangle as clipping path
-            "n",                     # end path (no fill, no stroke)
+            "W",  # use rectangle as clipping path
+            "n",  # end path (no fill, no stroke)
         ]
         if selected_index is not None:
             highlight_y = height - (selected_index + 1) * line_height
@@ -331,13 +331,13 @@ class FormFiller:
                     # Light-blue highlight colour (approximates Acrobat's default)
                     "0.600006 0.756866 0.854904 rg",
                     f"1 {highlight_y:.3f} {max(width - 2, 1):.3f} {line_height:.3f} re",
-                    "f",                 # fill the highlight rectangle
+                    "f",  # fill the highlight rectangle
                 ]
             )
 
         lines.extend(
             [
-                "BT",                    # begin text object
+                "BT",  # begin text object
                 f"{font_name} {font_size:.3f} Tf",  # set font
             ]
         )
@@ -347,8 +347,8 @@ class FormFiller:
             text_y = height - ((index + 1) * line_height) + ((line_height - font_size) / 2)
             escaped = self._escape_pdf_text(str(option))
             lines.append(f"1 0 0 1 2 {text_y:.3f} Tm")  # position text cursor
-            lines.append(f"({escaped}) Tj")             # draw the option text
-        lines.extend(["ET", "Q", "EMC", "Q"])           # close all groups
+            lines.append(f"({escaped}) Tj")  # draw the option text
+        lines.extend(["ET", "Q", "EMC", "Q"])  # close all groups
 
         stream = StreamObject()
         stream[NameObject("/Type")] = NameObject("/XObject")
