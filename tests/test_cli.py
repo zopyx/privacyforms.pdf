@@ -16,35 +16,21 @@ if TYPE_CHECKING:
     from click.testing import CliRunner
 
 # Import all test classes from the commands tests for backwards compatibility
-from tests.commands.test_pdf_check import TestCheckCommand
-from tests.commands.test_pdf_encrypt import TestEncryptCommand
-from tests.commands.test_pdf_extract import TestExtractCommand
 from tests.commands.test_pdf_fill_form import TestFillFormCommand
-from tests.commands.test_pdf_get_value import TestGetValueCommand
 from tests.commands.test_pdf_info import TestInfoCommand
-from tests.commands.test_pdf_list_fields import TestListFieldsCommand
-from tests.commands.test_pdf_list_permissions import (
-    TestListPermissionsCommand,
-    TestPermissionFormatter,
-    TestPermissionParser,
-)
-from tests.commands.test_pdf_set_permissions import TestSetPermissionsCommand
+from tests.commands.test_pdf_parse import TestParseCommand
+from tests.commands.test_pdf_verify_data import TestVerifyDataCommand
+from tests.commands.test_pdf_verify_json import TestVerifyJsonCommand
 
 # Re-export for backwards compatibility
 __all__ = [
-    "TestCheckCommand",
     "TestCreateExtractor",
-    "TestEncryptCommand",
-    "TestExtractCommand",
     "TestFillFormCommand",
-    "TestGetValueCommand",
     "TestInfoCommand",
-    "TestListFieldsCommand",
-    "TestListPermissionsCommand",
     "TestMainCommand",
-    "TestPermissionFormatter",
-    "TestPermissionParser",
-    "TestSetPermissionsCommand",
+    "TestParseCommand",
+    "TestVerifyDataCommand",
+    "TestVerifyJsonCommand",
 ]
 
 
@@ -61,7 +47,7 @@ class TestMainCommand:
         """Test main command shows version."""
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.3" in result.output
+        assert "0.2.0" in result.output
 
 
 class TestCreateExtractor:

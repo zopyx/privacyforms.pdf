@@ -14,7 +14,7 @@ from pypdf.generic import (
     TextStringObject,
 )
 
-from privacyforms_pdf.reader import FormReader
+from privacyforms_pdf.parser import get_field_options, get_field_type
 
 if TYPE_CHECKING:
     from pypdf import PdfWriter
@@ -25,7 +25,6 @@ class FormFiller:
 
     def __init__(self) -> None:
         """Initialize the filler."""
-        self._reader = FormReader()
 
     @staticmethod
     def _get_widget_annotation(
@@ -76,7 +75,7 @@ class FormFiller:
             if kid_state == normalized_value:
                 return normalized_value
 
-        options = FormReader.get_field_options(parent_annotation)
+        options = get_field_options(parent_annotation)
         if options:
             option_value = value[1:] if value.startswith("/") else value
             for index, option in enumerate(options):
@@ -114,7 +113,7 @@ class FormFiller:
                     continue
                 if parent_annotation.get("/FT", annotation.get("/FT")) != "/Btn":
                     continue
-                if FormReader.get_field_type(parent_annotation) != "radiobuttongroup":
+                if get_field_type(parent_annotation) != "radiobuttongroup":
                     continue
 
                 qualified_name = writer._get_qualified_field_name(parent_annotation)
@@ -142,7 +141,7 @@ class FormFiller:
     @staticmethod
     def _resolve_listbox_index(parent_annotation: dict[str, Any], value: str) -> int | None:
         """Resolve the selected index for a listbox value."""
-        options = FormReader.get_field_options(parent_annotation)
+        options = get_field_options(parent_annotation)
         normalized_value = value[1:] if value.startswith("/") else value
         for index, option in enumerate(options):
             if option == normalized_value:
@@ -166,7 +165,7 @@ class FormFiller:
                     continue
                 if parent_annotation.get("/FT", annotation.get("/FT")) != "/Ch":
                     continue
-                if FormReader.get_field_type(parent_annotation) != "listbox":
+                if get_field_type(parent_annotation) != "listbox":
                     continue
 
                 qualified_name = writer._get_qualified_field_name(parent_annotation)
@@ -217,7 +216,7 @@ class FormFiller:
         selected_index: int | None,
     ) -> Any | None:
         """Build a listbox appearance stream with highlighted selection."""
-        options = FormReader.get_field_options(parent_annotation)
+        options = get_field_options(parent_annotation)
         if not options:
             return None
 
@@ -325,7 +324,7 @@ class FormFiller:
                 value = field_values[matched_field_name]
                 field_type = parent_annotation.get("/FT", annotation.get("/FT"))
                 if field_type == "/Btn":
-                    if FormReader.get_field_type(parent_annotation) == "radiobuttongroup":
+                    if get_field_type(parent_annotation) == "radiobuttongroup":
                         text_value = TextStringObject(value)
                         parent_annotation[NameObject("/V")] = text_value
                         annotation[NameObject("/V")] = text_value
@@ -346,9 +345,7 @@ class FormFiller:
         listbox_field_values = {
             field_name: value
             for field_name, value in field_values.items()
-            if FormReader.get_field_type(
-                self.get_field_by_name_from_writer(writer, field_name) or {}
-            )
+            if get_field_type(self.get_field_by_name_from_writer(writer, field_name) or {})
             == "listbox"
         }
         if listbox_field_values:
@@ -410,7 +407,7 @@ class FormFiller:
         for field_name, value in form_data.items():
             str_value = ("/Yes" if value else "/Off") if isinstance(value, bool) else str(value)
             field_values[field_name] = str_value
-            field_type = FormReader.get_field_type(fields.get(field_name, {}))
+            field_type = get_field_type(fields.get(field_name, {}))
             if field_type == "radiobuttongroup":
                 radio_field_values[field_name] = str_value
             elif field_type == "listbox":

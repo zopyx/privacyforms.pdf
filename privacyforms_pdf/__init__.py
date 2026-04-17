@@ -1,60 +1,47 @@
 """privacyforms-pdf: Python library for PDF form operations using pypdf."""
 
-from privacyforms_pdf.reader import FormReader
-
-from .backends.pdfcpu import (
-    PDFCPUError,
-    PDFCPUExecutionError,
-    PDFCPUNotFoundError,
-    is_pdfcpu_available,
-)
 from .extractor import (
-    FieldGeometry,
     FieldNotFoundError,
-    FormField,
     FormValidationError,
-    PDFField,
-    PDFFormData,
     PDFFormError,
     PDFFormExtractor,
     PDFFormNotFoundError,
-    cluster_y_positions,
-    get_available_geometry_backends,
-    has_geometry_support,
 )
 from .filler import FormFiller
-from .security import PDFSecurityManager
+from .parser import extract_pdf_form, parse_pdf
+from .schema import (
+    ChoiceOption,
+    FieldFlags,
+    FieldLayout,
+    PDFField,
+    PDFFieldType,
+    PDFRepresentation,
+    RowGroup,
+)
 from .utils import _install_pypdf_warning_filter, _PypdfWarningFilter
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 __all__ = [
     # Main orchestrator
     "PDFFormExtractor",
     # Collaborator classes
-    "FormReader",
     "FormFiller",
-    "PDFSecurityManager",
-    # Data models
-    "PDFFormData",
+    # Canonical schema (new)
+    "PDFRepresentation",
+    "FieldFlags",
+    "FieldLayout",
+    "ChoiceOption",
+    "RowGroup",
+    "PDFFieldType",
     "PDFField",
-    "FieldGeometry",
-    # Legacy compatibility
-    "FormField",
+    # Parser facades
+    "parse_pdf",
+    "extract_pdf_form",
     # Exceptions
     "PDFFormError",
     "PDFFormNotFoundError",
     "FormValidationError",
     "FieldNotFoundError",
-    # Backwards compatibility - old exception names (deprecated)
-    "PDFCPUError",
-    "PDFCPUExecutionError",
-    "PDFCPUNotFoundError",
-    # Utility functions
-    "get_available_geometry_backends",
-    "has_geometry_support",
-    "is_pdfcpu_available",
-    "cluster_y_positions",
-    "extract_pdf_form",
     # Internal helpers (re-exported for tests)
     "_install_pypdf_warning_filter",
     "_PypdfWarningFilter",

@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from ..extractor import PDFFormError
+from ..hooks import hookimpl
 from .utils import create_extractor
 
 
@@ -31,3 +32,9 @@ def info_command(ctx: click.Context, pdf_path: Path) -> None:  # noqa: ARG001
             click.echo(f"✗ {pdf_path} does not contain a form")
     except PDFFormError as e:
         raise click.ClickException("Failed to get form info.") from e
+
+
+@hookimpl
+def register_commands() -> list[click.Command]:
+    """Register info command."""
+    return [info_command]

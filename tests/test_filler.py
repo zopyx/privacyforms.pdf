@@ -9,7 +9,6 @@ import pytest
 from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 
 from privacyforms_pdf.filler import FormFiller
-from privacyforms_pdf.reader import FormReader
 
 if TYPE_CHECKING:
     from pathlib import Path as PathType
@@ -162,7 +161,7 @@ class TestFormFillerResolveRadioFieldState:
     """Tests for _resolve_radio_field_state fallback loops."""
 
     def test_resolve_radio_field_state_fallback_to_options(self) -> None:
-        """Test fallback matching via FormReader.get_field_options."""
+        """Test fallback matching via get_field_options."""
         kid_annotation = MagicMock()
         kid_annotation.get_object.return_value = {"/AP": {"/N": {"/OptionA": None}}}
 
@@ -171,7 +170,7 @@ class TestFormFillerResolveRadioFieldState:
             "/Opt": ["OptionA"],
         }
 
-        with patch.object(FormReader, "get_field_options", return_value=["OptionA"]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["OptionA"]):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "OptionA")
             assert result == "/OptionA"
 
@@ -184,7 +183,7 @@ class TestFormFillerResolveRadioFieldState:
             "/Kids": [kid_annotation],
         }
 
-        with patch.object(FormReader, "get_field_options", return_value=None):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=None):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "//CustomState")
             assert result == "/CustomState"
 
@@ -197,7 +196,7 @@ class TestFormFillerResolveRadioFieldState:
             "/Kids": [kid_annotation],
         }
 
-        with patch.object(FormReader, "get_field_options", return_value=None):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=None):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "Missing")
             assert result == "/Off"
 
@@ -212,7 +211,7 @@ class TestFormFillerResolveRadioFieldState:
             "/Kids": [missing_state_kid, matching_state_kid],
         }
 
-        with patch.object(FormReader, "get_field_options", return_value=["Choice", "Other"]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Choice", "Other"]):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "/Other")
             assert result == "/Choice"
 
@@ -227,7 +226,7 @@ class TestFormFillerResolveRadioFieldState:
             "/Kids": [first_kid, second_kid],
         }
 
-        with patch.object(FormReader, "get_field_options", return_value=["Choice", "Choice"]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Choice", "Choice"]):
             result = FormFiller._resolve_radio_field_state(parent_annotation, "Choice")
             assert result == "/MappedChoice"
 
@@ -265,7 +264,7 @@ class TestFormFillerSyncRadioButtonStates:
         writer.pages = [{"/Annots": [text_ref]}]
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
-        with patch.object(FormReader, "get_field_type", return_value="textfield"):
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="textfield"):
             filler._sync_radio_button_states(writer, {"Choice": "/Yes"})
 
     def test_sync_radio_skips_checkbox_widgets(self) -> None:
@@ -283,7 +282,7 @@ class TestFormFillerSyncRadioButtonStates:
         writer.pages = [{"/Annots": [checkbox_ref]}]
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
-        with patch.object(FormReader, "get_field_type", return_value="checkbox"):
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
             filler._sync_radio_button_states(writer, {"Agree": "/Yes"})
 
 
@@ -323,7 +322,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         writer.pages = [{"/Annots": [text_ref]}]
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
-        with patch.object(FormReader, "get_field_type", return_value="textfield"):
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="textfield"):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
 
     def test_sync_listbox_skips_unmatched_field(self) -> None:
@@ -341,7 +340,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         writer.pages = [{"/Annots": [widget_ref]}]
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
-        with patch.object(FormReader, "get_field_type", return_value="listbox"):
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
 
     def test_sync_listbox_with_parent_ref(self) -> None:
@@ -368,8 +367,8 @@ class TestFormFillerSyncListboxSelectionIndexes:
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
         with (
-            patch.object(FormReader, "get_field_type", return_value="listbox"),
-            patch.object(FormReader, "get_field_options", return_value=["Red", "Blue"]),
+            patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
+            patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]),
             patch.object(filler, "_build_listbox_appearance_stream", return_value=None),
         ):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
@@ -396,8 +395,8 @@ class TestFormFillerSyncListboxSelectionIndexes:
         mock_ref = NameObject("/Ref")
 
         with (
-            patch.object(FormReader, "get_field_type", return_value="listbox"),
-            patch.object(FormReader, "get_field_options", return_value=["Red", "Blue"]),
+            patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
+            patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]),
             patch.object(filler, "_build_listbox_appearance_stream", return_value=mock_ref),
         ):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
@@ -425,8 +424,8 @@ class TestFormFillerSyncListboxSelectionIndexes:
         mock_ref = NameObject("/Ref")
 
         with (
-            patch.object(FormReader, "get_field_type", return_value="listbox"),
-            patch.object(FormReader, "get_field_options", return_value=["Red", "Blue"]),
+            patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
+            patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]),
             patch.object(filler, "_build_listbox_appearance_stream", return_value=mock_ref),
         ):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
@@ -449,7 +448,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         writer.pages = [{"/Annots": [widget_ref]}]
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
-        with patch.object(FormReader, "get_field_type", return_value="combobox"):
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="combobox"):
             filler._sync_listbox_selection_indexes(writer, {"Country": "USA"})
 
 
@@ -463,7 +462,7 @@ class TestFormFillerBuildListboxAppearanceStream:
         annotation = {}
         parent_annotation = {}
 
-        with patch.object(FormReader, "get_field_options", return_value=[]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=[]):
             result = filler._build_listbox_appearance_stream(
                 writer, annotation, parent_annotation, 0
             )
@@ -477,7 +476,7 @@ class TestFormFillerBuildListboxAppearanceStream:
         annotation = {}
         parent_annotation = {}
 
-        with patch.object(FormReader, "get_field_options", return_value=["Red"]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red"]):
             result = filler._build_listbox_appearance_stream(
                 writer, annotation, parent_annotation, 0
             )
@@ -509,7 +508,7 @@ class TestFormFillerBuildListboxAppearanceStream:
         annotation = {"/AP": ap_dict}
         parent_annotation = {}
 
-        with patch.object(FormReader, "get_field_options", return_value=["Red"]):
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red"]):
             result = filler._build_listbox_appearance_stream(
                 writer, annotation, parent_annotation, 0
             )
@@ -551,7 +550,7 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
         with (
-            patch.object(FormReader, "get_field_type", return_value="radiobuttongroup"),
+            patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"),
             patch.object(filler, "_sync_radio_button_states") as mock_sync,
         ):
             filler._fill_form_fields_without_appearance(writer, {"Choice": "/Yes"})
@@ -571,8 +570,366 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
         writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
 
         with (
-            patch.object(FormReader, "get_field_type", side_effect=lambda a: "listbox"),
+            patch("privacyforms_pdf.filler.get_field_type", side_effect=lambda a: "listbox"),
             patch.object(filler, "_sync_listbox_selection_indexes") as mock_sync,
         ):
             filler._fill_form_fields_without_appearance(writer, {"Colors": "Red"})
             mock_sync.assert_called_once_with(writer, {"Colors": "Red"})
+
+
+    def test_sync_listbox_selected_index_none(self) -> None:
+        """Test _sync_listbox_selection_indexes when selected_index is None."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Ch",
+            "/T": "Colors",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        with (
+            patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
+            patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]),
+            patch.object(filler, "_resolve_listbox_index", return_value=None),
+            patch.object(filler, "_build_listbox_appearance_stream", return_value=None) as mock_build,
+        ):
+            filler._sync_listbox_selection_indexes(writer, {"Colors": "Purple"})
+            assert widget["/V"] == TextStringObject("Purple")
+            mock_build.assert_called_once_with(writer, widget, widget, None)
+            assert "/I" not in widget
+            assert "/TI" not in widget
+
+
+class TestFormFillerBuildListboxAppearanceStreamSelectedIndexNone:
+    """Tests for _build_listbox_appearance_stream when selected_index is None."""
+
+    def test_build_listbox_appearance_stream_selected_index_none(self) -> None:
+        """Test _build_listbox_appearance_stream skips highlight when selected_index is None."""
+        filler = FormFiller()
+        writer = MagicMock()
+        writer._add_object.return_value = "ref"
+        annotation = {}
+        parent_annotation = {}
+
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red"]):
+            result = filler._build_listbox_appearance_stream(
+                writer, annotation, parent_annotation, None
+            )
+            assert result == "ref"
+            stream_arg = writer._add_object.call_args[0][0]
+            stream_data = stream_arg.get_data().decode("utf-8")
+            assert "0.600006 0.756866 0.854904 rg" not in stream_data
+            assert "1 g" not in stream_data  # no selected index, so all options use "0 g"
+
+
+class TestFormFillerFillFormFieldsWithoutAppearanceEdgeCases:
+    """Additional edge-case tests for _fill_form_fields_without_appearance."""
+
+    def test_fill_without_appearance_skips_page_without_annotations(self) -> None:
+        """Test _fill_form_fields_without_appearance skips pages with no annotations."""
+        filler = FormFiller()
+        writer = MagicMock()
+        writer.pages = [{"/Annots": []}]
+        filler._fill_form_fields_without_appearance(writer, {"Name": "John"})
+        writer.set_need_appearances_writer.assert_called_once_with(True)
+
+    def test_fill_without_appearance_skips_non_widget_annotation(self) -> None:
+        """Test _fill_form_fields_without_appearance skips non-widget annotations."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        link_ref = MagicMock()
+        link_ref.get_object.return_value = {"/Subtype": "/Link"}
+
+        writer.pages = [{"/Annots": [link_ref]}]
+        filler._fill_form_fields_without_appearance(writer, {"Name": "John"})
+
+    def test_fill_without_appearance_skips_unmatched_field_name(self) -> None:
+        """Test _fill_form_fields_without_appearance skips widgets not in field_values."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "OtherField",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        filler._fill_form_fields_without_appearance(writer, {"Name": "John"})
+        assert "/V" not in widget
+
+    def test_fill_without_appearance_checkbox_button(self) -> None:
+        """Test _fill_form_fields_without_appearance handles checkbox (/Btn non-radio)."""
+        filler = FormFiller()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "Agree",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
+            filler._fill_form_fields_without_appearance(writer, {"Agree": "/Yes"})
+            from pypdf.generic import NameObject
+
+            assert widget["/V"] == NameObject("/Yes")
+            assert widget["/AS"] == NameObject("/Yes")
+
+    def test_fill_without_appearance_checkbox_button_no_leading_slash(self) -> None:
+        """Test checkbox value gets leading slash added when missing."""
+        filler = FormFiller()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "Agree",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer = MagicMock()
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
+            filler._fill_form_fields_without_appearance(writer, {"Agree": "Yes"})
+            from pypdf.generic import NameObject
+
+            assert widget["/V"] == NameObject("/Yes")
+            assert widget["/AS"] == NameObject("/Yes")
+
+
+class TestFormFillerGetFieldByNameFromWriter:
+    """Tests for get_field_by_name_from_writer edge cases."""
+
+    def test_get_field_by_name_returns_none_when_no_annotations(self) -> None:
+        """Test get_field_by_name_from_writer returns None for pages without annotations."""
+        filler = FormFiller()
+        writer = MagicMock()
+        writer.pages = [{"/Annots": []}]
+        result = filler.get_field_by_name_from_writer(writer, "Name")
+        assert result is None
+
+    def test_get_field_by_name_skips_non_widget(self) -> None:
+        """Test get_field_by_name_from_writer skips non-widget annotations."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        link_ref = MagicMock()
+        link_ref.get_object.return_value = {"/Subtype": "/Link"}
+
+        writer.pages = [{"/Annots": [link_ref]}]
+        result = filler.get_field_by_name_from_writer(writer, "Name")
+        assert result is None
+
+    def test_get_field_by_name_continues_when_no_match(self) -> None:
+        """Test get_field_by_name_from_writer continues inner loop when no match."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "Other",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        result = filler.get_field_by_name_from_writer(writer, "Name")
+        assert result is None
+
+    def test_get_field_by_name_returns_on_match(self) -> None:
+        """Test get_field_by_name_from_writer returns parent_annotation on match."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "Name",
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        result = filler.get_field_by_name_from_writer(writer, "Name")
+        assert result is widget
+
+    def test_get_field_by_name_across_multiple_pages(self) -> None:
+        """Test get_field_by_name_from_writer searches across pages."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        first_widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "First",
+        }
+        first_ref = MagicMock()
+        first_ref.get_object.return_value = first_widget
+
+        second_widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Tx",
+            "/T": "Second",
+        }
+        second_ref = MagicMock()
+        second_ref.get_object.return_value = second_widget
+
+        writer.pages = [
+            {"/Annots": [first_ref]},
+            {"/Annots": [second_ref]},
+        ]
+        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+
+        result = filler.get_field_by_name_from_writer(writer, "Second")
+        assert result is second_widget
+
+
+class TestFormFillerWidgetOnStateExtra:
+    """Extra tests for _get_widget_on_state uncovered branches."""
+
+    def test_get_widget_on_state_returns_none_when_no_ap(self) -> None:
+        """Test _get_widget_on_state returns None when /AP is missing."""
+        assert FormFiller._get_widget_on_state({}) is None
+
+    def test_get_widget_on_state_returns_none_when_no_n_in_ap(self) -> None:
+        """Test _get_widget_on_state returns None when /N is missing in /AP."""
+        assert FormFiller._get_widget_on_state({"/AP": {}}) is None
+
+
+class TestFormFillerResolveRadioFieldStateExtra:
+    """Extra tests for _resolve_radio_field_state uncovered branches."""
+
+    def test_resolve_radio_field_state_continues_when_index_gte_len_kids(self) -> None:
+        """Test option fallback continues when matching option index exceeds kids length."""
+        kid = MagicMock()
+        kid.get_object.return_value = {"/AP": {"/N": {"/Off": None}}}
+        parent_annotation = {"/Kids": [kid]}
+
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Other", "Match"]):
+            result = FormFiller._resolve_radio_field_state(parent_annotation, "Match")
+            assert result == "/Off"
+
+
+class TestFormFillerSyncRadioButtonStatesExtra:
+    """Extra tests for _sync_radio_button_states inner loop branches."""
+
+    def test_sync_radio_continues_when_no_field_match(self) -> None:
+        """Test _sync_radio_button_states continues when widget name not in field_values."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "RadioGroup",
+            "/AP": {"/N": {"/Yes": None}},
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.RadioGroup"
+
+        with patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"):
+            filler._sync_radio_button_states(writer, {"OtherGroup": "/Yes"})
+            assert "/V" not in widget
+
+    def test_sync_radio_matches_by_annotation_name(self) -> None:
+        """Test _sync_radio_button_states matches via annotation /T when qualified_name differs."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "RadioGroup",
+            "/AP": {"/N": {"/Yes": None}},
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        with (
+            patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"),
+            patch.object(filler, "_resolve_radio_field_state", return_value="/Yes"),
+        ):
+            filler._sync_radio_button_states(writer, {"RadioGroup": "/Yes"})
+            assert widget["/V"] == NameObject("/Yes")
+            assert widget["/AS"] == NameObject("/Yes")
+
+    def test_sync_radio_matches_by_parent_name(self) -> None:
+        """Test _sync_radio_button_states matches via parent /T when other names differ."""
+        filler = FormFiller()
+        writer = MagicMock()
+
+        parent = {
+            "/Subtype": "/Widget",
+            "/FT": "/Btn",
+            "/T": "ParentRadio",
+        }
+        parent_ref = MagicMock()
+        parent_ref.get_object.return_value = parent
+
+        widget = {
+            "/Subtype": "/Widget",
+            "/Parent": parent_ref,
+            "/AP": {"/N": {"/Yes": None}},
+        }
+        widget_ref = MagicMock()
+        widget_ref.get_object.return_value = widget
+
+        writer.pages = [{"/Annots": [widget_ref]}]
+        writer._get_qualified_field_name.return_value = "Qualified.Other"
+
+        with (
+            patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"),
+            patch.object(filler, "_resolve_radio_field_state", return_value="/Yes"),
+        ):
+            filler._sync_radio_button_states(writer, {"ParentRadio": "/Yes"})
+            assert parent["/V"] == NameObject("/Yes")
+            assert widget["/AS"] == NameObject("/Yes")
+            assert widget["/V"] == NameObject("/Yes")
+
+
+class TestFormFillerResolveListboxIndex:
+    """Tests for _resolve_listbox_index uncovered branches."""
+
+    def test_resolve_listbox_index_returns_none_when_not_found(self) -> None:
+        """Test _resolve_listbox_index returns None when value is not in options."""
+        parent_annotation = {}
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]):
+            result = FormFiller._resolve_listbox_index(parent_annotation, "Green")
+            assert result is None
+
+    def test_resolve_listbox_index_continues_loop_before_match(self) -> None:
+        """Test _resolve_listbox_index continues loop when first options don't match."""
+        parent_annotation = {}
+        with patch("privacyforms_pdf.filler.get_field_options", return_value=["Red", "Blue"]):
+            result = FormFiller._resolve_listbox_index(parent_annotation, "Blue")
+            assert result == 1

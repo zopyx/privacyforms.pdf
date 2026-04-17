@@ -14,21 +14,37 @@
 ```
 privacyforms_pdf/
 ├── __init__.py          # Public API exports
+├── schema.py            # Canonical PDFRepresentation schema
+├── schema_layout.py     # Layout and row grouping helpers
+├── parser.py            # PDF form parser (parse_pdf, extract_pdf_form)
 ├── extractor.py         # PDFFormExtractor class - core functionality
-└── cli.py               # Click-based command line interface
+├── filler.py            # FormFiller class - pypdf form filling
+├── hooks.py             # Pluggy hook specifications
+├── commands/            # Built-in CLI command plugins
+│   ├── pdf_fill_form.py
+│   ├── pdf_parse.py
+│   ├── pdf_verify_data.py
+│   ├── pdf_verify_json.py
+│   └── ...
+└── cli.py               # Click-based CLI; loads commands via pluggy
 ```
 
 ### Core Classes
 
-- **PDFFormExtractor**: Main class for extracting and filling PDF forms
-  - Uses pypdf for all PDF operations by default
-  - Can optionally use pdfcpu for form filling via `fill_form_with_pdfcpu()`
+- **PDFFormExtractor**: Main class for filling PDF forms
+  - Uses pypdf for all PDF operations
   - Handles all PDF form field types (textfield, datefield, checkbox, radiobuttongroup, etc.)
-  - Provides methods: `extract()`, `list_fields()`, `get_field_value()`, `has_form()`, `fill_form()`, `fill_form_with_pdfcpu()`
+  - Provides methods: `has_form()`, `fill_form()`, `fill_form_from_json()`, `validate_form_data()`
+- **Pluggy Plugin System**: CLI commands are loaded dynamically via `pluggy`
+  - Hook specification: `PDFFormsCommandsSpec.register_commands()`
+  - Built-in commands are registered as `privacyforms_pdf.commands` entry points
+  - Third-party packages can extend the CLI by implementing the same hook
 
-- **PDFFormData**: Dataclass representing extracted form data
-- **PDFField**: Pydantic model representing individual form fields with geometry support
-- **FieldGeometry**: Pydantic model representing field position and size
+- **PDFRepresentation**: Canonical Pydantic schema for extracted form data (replaces internal PDFFormData)
+- **PDFField** (schema.py): Rich Pydantic model with `field_flags`, `choices`, `layout`, `title`, etc.
+- **FieldLayout**: Pydantic model representing field position and size (int-based, replaces FieldGeometry)
+- **RowGroup**: Visual row groupings derived from layout analysis
+
 
 ### Exceptions
 
@@ -36,11 +52,6 @@ privacyforms_pdf/
 - `PDFFormNotFoundError`: PDF has no form
 - `FormValidationError`: Form data validation failed
 - `FieldNotFoundError`: Field not found in form
-
-**Backwards Compatibility Aliases (deprecated):**
-- `PDFCPUError` = `PDFFormError`
-- `PDFCPUNotFoundError` = `PDFFormError`
-- `PDFCPUExecutionError` = `PDFFormError`
 
 ## Tech Stack
 
@@ -51,6 +62,7 @@ privacyforms_pdf/
 | Type Checker | ty | `uv run ty check` |
 | Testing | pytest + pytest-cov | `uv run pytest` |
 | CLI Framework | Click | Defined in `cli.py` |
+| Plugin System | pluggy | Commands loaded via entry points |
 | Data Validation | Pydantic | For form field models |
 | PDF Library | pypdf | Pure Python PDF manipulation |
 
@@ -106,9 +118,16 @@ make upload-test    # Upload to TestPyPI (with twine)
 ```
 tests/
 ├── __init__.py
-├── conftest.py         # pytest fixtures
-├── test_extractor.py   # Tests for PDFFormExtractor
-└── test_cli.py         # Tests for CLI commands
+├── conftest.py                    # pytest fixtures
+├── test_extractor.py              # Tests for PDFFormExtractor
+├── test_filler.py                 # Tests for FormFiller
+├── test_specs.py                  # Tests for schema and parser
+├── test_cli.py                    # Tests for CLI group
+└── commands/
+    ├── test_pdf_parse.py
+    ├── test_pdf_verify_data.py
+    ├── test_pdf_verify_json.py
+    └── ...
 ```
 
 ### Running Tests
@@ -227,20 +246,21 @@ See `pyproject.toml`:
 - `pydantic` - Data validation
 - `pypdf>=5` - PDF manipulation library
 
-### Optional External Binary Dependencies
-
-- `pdfcpu` - Optional external binary for filling PDF forms via `--pdfcpu` CLI option
-  - Only required when using `fill_form_with_pdfcpu()` method or `--pdfcpu` CLI flag
-  - pypdf is used by default for all operations including form filling
-
 ## Common Tasks
 
 ### Add a New CLI Command
 
-1. Add function in `cli.py` with `@main.command()` decorator
-2. Use Click's argument/option decorators
-3. Handle errors with `click.ClickException`
-4. Add tests in `tests/test_cli.py`
+1. Create `privacyforms_pdf/commands/pdf_<name>.py` with a `@click.command(name="...")` function
+2. Add a `register_commands()` function decorated with `@hookimpl` that returns the command(s)
+3. Register the module as a `privacyforms_pdf.commands` entry point in `pyproject.toml`
+4. Use Click's argument/option decorators and handle errors with `click.ClickException`
+5. Add tests in `tests/commands/test_pdf_<name>.py`
+
+Example entry point in `pyproject.toml`:
+```toml
+[project.entry-points."privacyforms_pdf.commands"]
+my_command = "privacyforms_pdf.commands.pdf_my_command"
+```
 
 ### Add a New Extractor Method
 
@@ -293,21 +313,6 @@ uv run pytest -v --tb=short
 uv run pytest tests/test_extractor.py::TestClass::test_method -v
 ```
 
-## Migration from pdfcpu Version
-
-If you're migrating from a version that used pdfcpu:
-
-1. **No external binary required**: pypdf is a pure Python library installed via pip/uv
-2. **Exception names changed**: 
-   - `PDFCPUError` → `PDFFormError`
-   - `PDFCPUNotFoundError` → `PDFFormError` (no longer needed)
-   - `PDFCPUExecutionError` → `PDFFormError`
-3. **Constructor changed**: Removed `pdfcpu_path` and `geometry_backend` parameters
-4. **API remains compatible**: All other methods work the same way
-5. **Optional pdfcpu support**: pdfcpu is now available as an optional backend for form filling via `fill_form_with_pdfcpu()` method or `--pdfcpu` CLI flag
-
-Old exception names are kept as aliases for backwards compatibility.
-
 ## Future Enhancements
 
 Potential features to implement:
@@ -319,4 +324,4 @@ Potential features to implement:
 
 ---
 
-Last updated: 2026-03-07 (v0.1.3)
+Last updated: 2026-04-17 (v0.2.0)

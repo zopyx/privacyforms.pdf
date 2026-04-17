@@ -1,10 +1,9 @@
-"""Tests for the specs PDF schema and parser module."""
+"""Tests for the canonical PDF schema and parser module."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,9 +15,8 @@ from pypdf.generic import (
     TextStringObject,
 )
 
-from specs import extract_pdf_form
-from specs.pdf_parser import main, parse_pdf
-from specs.pdf_schema import (
+from privacyforms_pdf.parser import extract_pdf_form, parse_pdf
+from privacyforms_pdf.schema import (
     ChoiceOption,
     FieldFlags,
     PDFField,
@@ -26,11 +24,8 @@ from specs.pdf_schema import (
     RowGroup,
 )
 
-if TYPE_CHECKING:
-    from click.testing import CliRunner as CliRunnerType
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FILLED_FORM_SAMPLE = REPO_ROOT / "specs" / "samples" / "FilledForm.pdf"
+FILLED_FORM_SAMPLE = REPO_ROOT / "samples" / "FilledForm.pdf"
 
 
 class TestPDFSchemaValidation:
@@ -174,11 +169,11 @@ class TestPDFSchemaSerialization:
 
 
 class TestPDFParserUnit:
-    """Unit tests for pdf_parser functions with mocked pypdf."""
+    """Unit tests for parser functions with mocked pypdf."""
 
     def test_parse_pdf_empty_form_uses_explicit_source(self, tmp_path: Path) -> None:
         """Test parsing a PDF with no form fields preserves an explicit source."""
-        with patch("specs.pdf_parser.PdfReader") as mock_reader:
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
             mock_reader.return_value.get_fields.return_value = {}
             result = parse_pdf(tmp_path / "empty.pdf", source="empty.pdf")
             assert result.fields == []
@@ -195,7 +190,7 @@ class TestPDFParserUnit:
                 NameObject("/Ff"): NumberObject(0),
             }
         )
-        with patch("specs.pdf_parser.PdfReader") as mock_reader:
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
             mock_reader.return_value.get_fields.return_value = {"Name": field_dict}
             mock_reader.return_value.pages = []
             result = parse_pdf(tmp_path / "form.pdf")
@@ -213,7 +208,7 @@ class TestPDFParserUnit:
                 NameObject("/V"): NameObject("/Yes"),
             }
         )
-        with patch("specs.pdf_parser.PdfReader") as mock_reader:
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
             mock_reader.return_value.get_fields.return_value = {"Agree": field_dict}
             mock_reader.return_value.pages = []
             result = parse_pdf(tmp_path / "form.pdf")
@@ -250,7 +245,7 @@ class TestPDFParserUnit:
                 NameObject("/Kids"): ArrayObject([kid1]),
             }
         )
-        with patch("specs.pdf_parser.PdfReader") as mock_reader:
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
             mock_reader.return_value.get_fields.return_value = {"Status": field_dict}
             mock_page = MagicMock()
             mock_page.get.return_value = None
@@ -270,7 +265,7 @@ class TestPDFParserUnit:
                 NameObject("/Ff"): NumberObject(1 << 16),
             }
         )
-        with patch("specs.pdf_parser.PdfReader") as mock_reader:
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
             mock_reader.return_value.get_fields.return_value = {"Submit": field_dict}
             mock_reader.return_value.pages = []
             result = parse_pdf(tmp_path / "form.pdf")
@@ -280,7 +275,7 @@ class TestPDFParserUnit:
 
     def test_extract_pdf_form_facade(self, tmp_path: Path) -> None:
         """Test extract_pdf_form facade calls parse_pdf."""
-        with patch("specs.pdf_parser.parse_pdf") as mock_parse:
+        with patch("privacyforms_pdf.parser.parse_pdf") as mock_parse:
             mock_parse.return_value = PDFRepresentation(fields=[])
             extract_pdf_form(tmp_path / "form.pdf")
             mock_parse.assert_called_once()
@@ -322,76 +317,3 @@ class TestPDFParserIntegration:
         restored = PDFRepresentation.model_validate_json(json_text)
         assert len(restored.fields) == len(result.fields)
         assert len(restored.rows) == len(result.rows)
-
-
-class TestPDFParserCLI:
-    """Tests for the pdf_parser CLI."""
-
-    def test_cli_default_output(self, runner: CliRunnerType, tmp_path: Path) -> None:
-        """Test CLI writes JSON and prints rows by default."""
-        pdf_path = FILLED_FORM_SAMPLE
-        if not pdf_path.exists():
-            pytest.skip("Sample PDF not found")
-
-        out_path = tmp_path / "output.json"
-        result = runner.invoke(main, [str(pdf_path), str(out_path)])
-        assert result.exit_code == 0
-        assert f"Written to {out_path}" in result.output
-        assert "Row  1 (page" in result.output
-        assert out_path.exists()
-
-    def test_cli_by_id(self, runner: CliRunnerType, tmp_path: Path) -> None:
-        """Test CLI --by-id prints field IDs instead of names."""
-        pdf_path = FILLED_FORM_SAMPLE
-        if not pdf_path.exists():
-            pytest.skip("Sample PDF not found")
-
-        out_path = tmp_path / "output.json"
-        result = runner.invoke(main, ["--by-id", str(pdf_path), str(out_path)])
-        assert result.exit_code == 0
-        assert "f-" in result.output
-        # Should not contain typical field names in row output
-        assert "Employer" not in result.output
-
-    def test_cli_help(self, runner: CliRunnerType) -> None:
-        """Test CLI shows help."""
-        result = runner.invoke(main, ["--help"])
-        assert result.exit_code == 0
-        assert "--by-id" in result.output
-
-
-class TestVerifyFormJsonCLI:
-    """Tests for the verify_form_json CLI."""
-
-    def test_valid_json(self, runner: CliRunnerType, tmp_path: Path) -> None:
-        """Test verify_form_json succeeds on valid JSON."""
-        from specs.pdf_schema import PDFField, PDFRepresentation
-
-        rep = PDFRepresentation(fields=[PDFField(name="A", id="f-1", type="textfield")])
-        json_path = tmp_path / "valid.json"
-        json_path.write_text(rep.to_compact_json())
-
-        from specs.verify_form_json import main as verify_main
-
-        result = runner.invoke(verify_main, [str(json_path)])
-        assert result.exit_code == 0
-        assert "Valid:" in result.output
-
-    def test_invalid_json(self, runner: CliRunnerType, tmp_path: Path) -> None:
-        """Test verify_form_json fails on invalid JSON."""
-        json_path = tmp_path / "invalid.json"
-        json_path.write_text('{"bad": true}')
-
-        from specs.verify_form_json import main as verify_main
-
-        result = runner.invoke(verify_main, [str(json_path)])
-        assert result.exit_code != 0
-        assert "Invalid:" in result.output
-
-    def test_verify_help(self, runner: CliRunnerType) -> None:
-        """Test verify_form_json shows help."""
-        from specs.verify_form_json import main as verify_main
-
-        result = runner.invoke(verify_main, ["--help"])
-        assert result.exit_code == 0
-        assert "JSON_FILE" in result.output

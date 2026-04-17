@@ -10,7 +10,7 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 ## Features
 
 - Extract form data from PDF files using pure Python (no external dependencies)
-- Fill PDF forms programmatically using pypdf or pdfcpu
+- Fill PDF forms programmatically using pypdf
 - Extract field geometry (position and size) information
 - Command-line interface with multiple commands
 - Full type hints and comprehensive test coverage (99%)
@@ -20,20 +20,6 @@ Python library for extracting and filling PDF forms using [pypdf](https://pypdf.
 
 - Python 3.14+
 - pypdf >= 5.0
-- pdfcpu >= 0.9 (optional, for `--pdfcpu` fill-form option)
-
-### Optional: Installing pdfcpu
-
-pdfcpu is only required if you want to use the `--pdfcpu` option for filling forms.
-It can handle some PDFs that pypdf may have issues with.
-
-```bash
-# macOS
-brew install pdfcpu
-
-# Or download from https://github.com/pdfcpu/pdfcpu/releases
-# Make sure pdfcpu is in your PATH
-```
 
 ## Installation
 
@@ -48,29 +34,17 @@ uv sync
 
 ## Quick Start
 
-### Check CLI is ready
-
-```bash
-pdf-forms check
-```
-
 ### Command Line Usage
 
 ```bash
-# Check if a PDF contains a form
-pdf-forms info form.pdf
+# Parse a fillable PDF into the canonical PDFRepresentation schema
+pdf-forms parse form.pdf -o representation.json
 
-# List all form fields
-pdf-forms list-fields form.pdf
+# Verify a JSON file against the PDFRepresentation schema
+pdf-forms verify-json representation.json
 
-# Get a specific field value
-pdf-forms get-value form.pdf "Field Name"
-
-# Extract form data to JSON
-pdf-forms extract form.pdf -o output.json
-
-# Extract form data to stdout
-pdf-forms extract form.pdf
+# Verify that data JSON keys match form field IDs
+pdf-forms verify-data --form-json representation.json --data-json data.json
 
 # Fill a form from JSON (validates before filling)
 pdf-forms fill-form form.pdf data.json -o filled.pdf
@@ -83,12 +57,6 @@ pdf-forms fill-form form.pdf data.json
 
 # Fill with strict mode (requires all form fields)
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
-
-# Fill using pdfcpu instead of pypdf (requires pdfcpu to be installed)
-pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu
-
-# Fill using a custom pdfcpu binary path
-pdf-forms fill-form form.pdf data.json -o filled.pdf --pdfcpu --pdfcpu-path /usr/local/bin/pdfcpu
 ```
 
 #### JSON Format
@@ -150,12 +118,6 @@ extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
 errors = extractor.validate_form_data("form.pdf", form_data)
 if errors:
     print("Validation errors:", errors)
-
-# Fill a form using pdfcpu (requires pdfcpu to be installed)
-# This can be useful when pypdf has issues with certain PDFs
-from privacyforms_pdf import is_pdfcpu_available
-if is_pdfcpu_available():
-    extractor.fill_form_with_pdfcpu("form.pdf", form_data, "filled.pdf")
 ```
 
 ## API Reference
@@ -188,7 +150,6 @@ extractor = PDFFormExtractor(
 - `validate_form_data(pdf_path: str | Path, form_data: dict, *, strict: bool = False, allow_extra_fields: bool = False) -> list[str]`: Validate form data (simple key:value format).
 - `fill_form(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data using pypdf.
 - `fill_form_from_json(pdf_path: str | Path, json_path: str | Path, output_path: str | Path | None = None, *, validate: bool = True) -> Path`: Fill a PDF form with data from a JSON file using pypdf.
-- `fill_form_with_pdfcpu(pdf_path: str | Path, form_data: dict, output_path: str | Path | None = None, *, validate: bool = True, pdfcpu_path: str = "pdfcpu") -> Path`: Fill a PDF form with data using pdfcpu binary.
 
 ### Data Classes
 
@@ -292,14 +253,8 @@ The `geometry` object contains the field's position and size in PDF points (1/72
 - `FormValidationError`: Raised when form data validation fails.
 - `FieldNotFoundError`: Raised when a field is not found in the form.
 
-**Note:** For backwards compatibility, the following aliases are still available but deprecated:
-- `PDFCPUError` (alias for `PDFFormError`)
-- `PDFCPUNotFoundError` (alias for `PDFFormError`)
-- `PDFCPUExecutionError` (alias for `PDFFormError`)
-
 ### Utility Functions
 
-- `is_pdfcpu_available(pdfcpu_path: str = "pdfcpu") -> bool`: Check if pdfcpu binary is available in the system PATH.
 - `get_available_geometry_backends() -> list[str]`: Return list of available geometry backends (always `["pypdf"]`).
 - `has_geometry_support() -> bool`: Check if geometry extraction is supported (always `True`).
 
@@ -327,11 +282,24 @@ uv run ty check
 privacyforms-pdf/
 ├── privacyforms_pdf/       # Main package
 │   ├── __init__.py         # Package exports
+│   ├── schema.py           # Canonical PDFRepresentation schema
+│   ├── schema_layout.py    # Layout and row grouping helpers
+│   ├── parser.py           # PDF form parser
 │   ├── extractor.py        # PDFFormExtractor implementation
+│   ├── filler.py           # FormFiller implementation
+│   ├── security.py         # PDF encryption and permissions
+│   ├── commands/           # CLI command modules
+│   │   ├── pdf_fill_form.py
+│   │   ├── pdf_parse.py
+│   │   ├── pdf_verify_data.py
+│   │   ├── pdf_verify_json.py
+│   │   └── ...
 │   └── cli.py              # Command-line interface
 ├── tests/                  # Test suite
-│   ├── test_extractor.py   # Tests for extractor
-│   └── test_cli.py         # Tests for CLI
+│   ├── test_extractor.py
+│   ├── test_filler.py
+│   ├── test_specs.py
+│   └── ...
 ├── pyproject.toml          # Project configuration
 └── README.md               # This file
 ```

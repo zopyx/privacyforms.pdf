@@ -1,0 +1,239 @@
+{
+  "source": "Bescheinigung_ueber_die_Anrechnung_von_Studienzeiten.pdf",
+  "fields": [
+    {
+      "name": "Name Vorname des  der StudierendenRow1",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 36,
+        "y": 539,
+        "width": 317,
+        "height": 24
+      }
+    },
+    {
+      "name": "GeburtsdatumRow1",
+      "id": "f-1",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 355,
+        "y": 539,
+        "width": 97,
+        "height": 24
+      }
+    },
+    {
+      "name": "Matrikelnummer falls schon vorhandenRow1",
+      "id": "f-2",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 454,
+        "y": 539,
+        "width": 104,
+        "height": 24
+      }
+    },
+    {
+      "name": "Abschluss",
+      "id": "f-3",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 91,
+        "y": 475,
+        "width": 464,
+        "height": 27
+      }
+    },
+    {
+      "name": "StudiengangFach",
+      "id": "f-4",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 131,
+        "y": 440,
+        "width": 422,
+        "height": 27
+      }
+    },
+    {
+      "name": "wird eine Anrechnung von",
+      "id": "f-5",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 179,
+        "y": 405,
+        "width": 36,
+        "height": 21
+      }
+    },
+    {
+      "name": "Abschluss_2",
+      "id": "f-6",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 91,
+        "y": 360,
+        "width": 465,
+        "height": 27
+      }
+    },
+    {
+      "name": "StudiengangFach_2",
+      "id": "f-7",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 131,
+        "y": 325,
+        "width": 422,
+        "height": 27
+      }
+    },
+    {
+      "name": "undefined",
+      "id": "f-8",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 340,
+        "y": 289,
+        "width": 24,
+        "height": 14
+      }
+    },
+    {
+      "name": "in das",
+      "id": "f-9",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 68,
+        "y": 250,
+        "width": 49,
+        "height": 16
+      }
+    },
+    {
+      "name": "Wintersemester 20",
+      "id": "f-10",
+      "type": "checkbox",
+      "layout": {
+        "page": 1,
+        "x": 220,
+        "y": 288,
+        "width": 12,
+        "height": 12
+      }
+    },
+    {
+      "name": "Sommersemester 20",
+      "id": "f-11",
+      "type": "checkbox",
+      "layout": {
+        "page": 1,
+        "x": 220,
+        "y": 268,
+        "width": 12,
+        "height": 12
+      }
+    },
+    {
+      "name": "undefined_2",
+      "id": "f-12",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 350,
+        "y": 269,
+        "width": 24,
+        "height": 14
+      }
+    },
+    {
+      "name": "Name Telefon für Rückfragen",
+      "id": "f-13",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 33,
+        "y": 107,
+        "width": 233,
+        "height": 27
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": [
+        "f-0",
+        "f-1",
+        "f-2"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-3"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-4"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-5"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-6"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-7"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-10",
+        "f-8"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-11",
+        "f-12"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-9"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-13"
+      ],
+      "page_index": 1
+    }
+  ]
+}

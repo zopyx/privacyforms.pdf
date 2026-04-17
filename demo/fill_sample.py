@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from privacyforms_pdf import PDFFormExtractor
+from privacyforms_pdf.parser import parse_pdf
 
 
 def generate_sample_value(field_type: str, field_name: str) -> str | bool:
@@ -45,19 +46,19 @@ def main() -> int:
         return 1
 
     # Extract form fields
-    form_data = extractor.extract(pdf_path)
-    print(f"Found {len(form_data.fields)} field(s)")
+    representation = parse_pdf(pdf_path)
+    print(f"Found {len(representation.fields)} field(s)")
 
     # Display extracted fields
     print("\n--- Extracted Fields ---")
-    for field in form_data.fields:
-        print(f"  - {field.name} (type: {field.field_type})")
+    for field in representation.fields:
+        print(f"  - {field.name} (type: {field.type})")
 
     # Generate sample data
     print(f"\nStep 2: Generating {json_path}...")
     sample_data: dict[str, str | bool] = {}
-    for field in form_data.fields:
-        sample_data[field.name] = generate_sample_value(field.field_type, field.name)
+    for field in representation.fields:
+        sample_data[field.name] = generate_sample_value(field.type, field.name)
 
     # Write JSON file
     with open(json_path, "w", encoding="utf-8") as f:
@@ -79,7 +80,7 @@ def main() -> int:
 
         # Verify by extracting again
         print("\nStep 4: Verifying filled data...")
-        filled_data = extractor.extract(result)
+        filled_data = parse_pdf(result)
         print(f"Verified {len(filled_data.fields)} field(s) in output PDF")
         print("\n--- Filled Values ---")
         for field in filled_data.fields:

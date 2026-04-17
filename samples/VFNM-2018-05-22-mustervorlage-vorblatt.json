@@ -1,0 +1,503 @@
+{
+  "source": "VFNM-2018-05-22-mustervorlage-vorblatt.pdf",
+  "fields": [
+    {
+      "name": "Name Verantwortlicher",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 636,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Verlag für Neue Mdien Data Communikcations GmbH"
+    },
+    {
+      "name": "Straße Verantwortlicher",
+      "id": "f-1",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 618,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Bötzinger Strasse 48"
+    },
+    {
+      "name": "Postleitzahl Verantwortlicher",
+      "id": "f-2",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 600,
+        "width": 289,
+        "height": 16
+      },
+      "value": "79111"
+    },
+    {
+      "name": "Ort Verantwortlicher",
+      "id": "f-3",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 583,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Freiburg"
+    },
+    {
+      "name": "Telefon Verantwortlicher",
+      "id": "f-4",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 565,
+        "width": 289,
+        "height": 16
+      },
+      "value": "0761 4701 0"
+    },
+    {
+      "name": "E-Mail-Adresse Verantwortlicher",
+      "id": "f-5",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 547,
+        "width": 289,
+        "height": 16
+      },
+      "value": "info@vfnm.de"
+    },
+    {
+      "name": "Internet-Adresse Verantwortlicher",
+      "id": "f-6",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 529,
+        "width": 289,
+        "height": 16
+      },
+      "value": "www.vfnm.de"
+    },
+    {
+      "name": "Name weiterer Verantwortlicher",
+      "id": "f-7",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 490,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Straße weiterer Verantwortlicher",
+      "id": "f-8",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 472,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Postleitzahl weiterer Verantwortlicher",
+      "id": "f-9",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 454,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Ort weiterer Verantwortlicher",
+      "id": "f-10",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 436,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Telefon weiterer Verantwortlicher",
+      "id": "f-11",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 418,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "E-Mail-Adresse weiterer Verantwortlicher",
+      "id": "f-12",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 400,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Name Vertreter des Verantwortlichen",
+      "id": "f-13",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 331,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Ralf Muckenhirn GF des Verlags für Neue Medien GmbH"
+    },
+    {
+      "name": "Straße Vertreter des Verantwortlichen",
+      "id": "f-14",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 313,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Bötzinger Str. 48"
+    },
+    {
+      "name": "Postleitzahl Vertreter des Verantwortlichen",
+      "id": "f-15",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 295,
+        "width": 289,
+        "height": 16
+      },
+      "value": "79111"
+    },
+    {
+      "name": "Ort Vertreter des Verantwortlichen",
+      "id": "f-16",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 278,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Freiburg"
+    },
+    {
+      "name": "Telefon Vertreter des Verantwortlichen",
+      "id": "f-17",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 260,
+        "width": 289,
+        "height": 16
+      },
+      "value": "0761 4701 0"
+    },
+    {
+      "name": "E-Mail-Adresse Vertreter des Verantwortlichen",
+      "id": "f-18",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 242,
+        "width": 289,
+        "height": 16
+      },
+      "value": "info@vfnm.de"
+    },
+    {
+      "name": "Anrede",
+      "id": "f-19",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 185,
+        "width": 67,
+        "height": 16
+      },
+      "value": "Herr / Frau"
+    },
+    {
+      "name": "Titel",
+      "id": "f-20",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 267,
+        "y": 185,
+        "width": 150,
+        "height": 16
+      }
+    },
+    {
+      "name": "Name, Vorname der datenschutzbeauftragten Person",
+      "id": "f-21",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 167,
+        "width": 289,
+        "height": 16
+      },
+      "value": "Datan Schütz"
+    },
+    {
+      "name": "Straße",
+      "id": "f-22",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 149,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Postleitzahl",
+      "id": "f-23",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 131,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Ort",
+      "id": "f-24",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 113,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "Telefon",
+      "id": "f-25",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 96,
+        "width": 289,
+        "height": 16
+      }
+    },
+    {
+      "name": "E-Mail-Adresse",
+      "id": "f-26",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 173,
+        "y": 78,
+        "width": 289,
+        "height": 16
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": [
+        "f-0"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-1"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-2"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-3"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-4"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-5"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-6"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-7"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-8"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-9"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-10"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-11"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-12"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-13"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-14"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-15"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-16"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-17"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-18"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-19",
+        "f-20"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-21"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-22"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-23"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-24"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-25"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-26"
+      ],
+      "page_index": 1
+    }
+  ]
+}

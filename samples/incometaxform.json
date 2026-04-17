@@ -1,0 +1,1221 @@
+{
+  "source": "incometaxform.pdf",
+  "fields": [
+    {
+      "name": "f1-1",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 125,
+        "y": 717,
+        "width": 134,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-2",
+      "id": "f-1",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 268,
+        "y": 717,
+        "width": 186,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-3",
+      "id": "f-2",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 125,
+        "y": 693,
+        "width": 134,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-4",
+      "id": "f-3",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 268,
+        "y": 693,
+        "width": 187,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-5",
+      "id": "f-4",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 124,
+        "y": 668,
+        "width": 284,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-6",
+      "id": "f-5",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 414,
+        "y": 668,
+        "width": 39,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-7",
+      "id": "f-6",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 124,
+        "y": 635,
+        "width": 327,
+        "height": 21
+      }
+    },
+    {
+      "name": "f1-8",
+      "id": "f-7",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 468,
+        "y": 716,
+        "width": 28,
+        "height": 12
+      }
+    },
+    {
+      "name": "f1-9",
+      "id": "f-8",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 499,
+        "y": 716,
+        "width": 19,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-10",
+      "id": "f-9",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 521,
+        "y": 717,
+        "width": 44,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-11",
+      "id": "f-10",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 471,
+        "y": 693,
+        "width": 25,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-12",
+      "id": "f-11",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 499,
+        "y": 693,
+        "width": 19,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-13",
+      "id": "f-12",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 522,
+        "y": 693,
+        "width": 45,
+        "height": 11
+      }
+    },
+    {
+      "name": "c1-1",
+      "id": "f-13",
+      "type": "radiobuttongroup",
+      "layout": {
+        "page": 1,
+        "x": 468,
+        "y": 610,
+        "width": 40,
+        "height": 11
+      },
+      "choices": [
+        {
+          "value": "Yes",
+          "text": "Yes",
+          "source_name": "Yes"
+        },
+        {
+          "value": "No",
+          "text": "No",
+          "source_name": "No"
+        }
+      ]
+    },
+    {
+      "name": "c1-2",
+      "id": "f-14",
+      "type": "radiobuttongroup",
+      "layout": {
+        "page": 1,
+        "x": 525,
+        "y": 611,
+        "width": 40,
+        "height": 11
+      },
+      "choices": [
+        {
+          "value": "Yes",
+          "text": "Yes",
+          "source_name": "Yes"
+        },
+        {
+          "value": "No",
+          "text": "No",
+          "source_name": "No"
+        }
+      ]
+    },
+    {
+      "name": "f1-14",
+      "id": "f-15",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 582,
+        "width": 89,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-16",
+      "id": "f-16",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 559,
+        "width": 89,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-18",
+      "id": "f-17",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 479,
+        "y": 535,
+        "width": 89,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-20",
+      "id": "f-18",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 511,
+        "width": 88,
+        "height": 14
+      }
+    },
+    {
+      "name": "c1-3",
+      "id": "f-19",
+      "type": "radiobuttongroup",
+      "layout": {
+        "page": 1,
+        "x": 129,
+        "y": 473,
+        "width": 149,
+        "height": 10
+      },
+      "choices": [
+        {
+          "value": "Yes",
+          "text": "Yes",
+          "source_name": "Yes"
+        },
+        {
+          "value": "No",
+          "text": "No",
+          "source_name": "No"
+        }
+      ]
+    },
+    {
+      "name": "f1-22",
+      "id": "f-20",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 463,
+        "width": 88,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-24",
+      "id": "f-21",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 439,
+        "width": 88,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-26",
+      "id": "f-22",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 479,
+        "y": 416,
+        "width": 89,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-28",
+      "id": "f-23",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 481,
+        "y": 391,
+        "width": 87,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-30",
+      "id": "f-24",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 483,
+        "y": 373,
+        "width": 85,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-32",
+      "id": "f-25",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 377,
+        "y": 360,
+        "width": 70,
+        "height": 10
+      }
+    },
+    {
+      "name": "f1-34",
+      "id": "f-26",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 480,
+        "y": 344,
+        "width": 90,
+        "height": 14
+      },
+      "value": "$0.00"
+    },
+    {
+      "name": "f1-36",
+      "id": "f-27",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 479,
+        "y": 308,
+        "width": 89,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-38",
+      "id": "f-28",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 482,
+        "y": 289,
+        "width": 86,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-40",
+      "id": "f-29",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 204,
+        "y": 274,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-41",
+      "id": "f-30",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 215,
+        "y": 274,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-42",
+      "id": "f-31",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 227,
+        "y": 274,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-43",
+      "id": "f-32",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 239,
+        "y": 274,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-44",
+      "id": "f-33",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 251,
+        "y": 274,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-45",
+      "id": "f-34",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 263,
+        "y": 274,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-46",
+      "id": "f-35",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 275,
+        "y": 274,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-47",
+      "id": "f-36",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 287,
+        "y": 274,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-48",
+      "id": "f-37",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 299,
+        "y": 274,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "c1-4",
+      "id": "f-38",
+      "type": "radiobuttongroup",
+      "layout": {
+        "page": 1,
+        "x": 368,
+        "y": 273,
+        "width": 62,
+        "height": 11
+      },
+      "choices": [
+        {
+          "value": "Yes",
+          "text": "Yes",
+          "source_name": "Yes"
+        },
+        {
+          "value": "No",
+          "text": "No",
+          "source_name": "No"
+        }
+      ]
+    },
+    {
+      "name": "f1-49",
+      "id": "f-39",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 203,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-50",
+      "id": "f-40",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 215,
+        "y": 258,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-51",
+      "id": "f-41",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 227,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-52",
+      "id": "f-42",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 239,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-53",
+      "id": "f-43",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 251,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-54",
+      "id": "f-44",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 263,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-55",
+      "id": "f-45",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 275,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-56",
+      "id": "f-46",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 287,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-57",
+      "id": "f-47",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 299,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-58",
+      "id": "f-48",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 311,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-59",
+      "id": "f-49",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 322,
+        "y": 257,
+        "width": 12,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-60",
+      "id": "f-50",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 334,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-61",
+      "id": "f-51",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 347,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-62",
+      "id": "f-52",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 358,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-63",
+      "id": "f-53",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 371,
+        "y": 257,
+        "width": 10,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-64",
+      "id": "f-54",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 382,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-65",
+      "id": "f-55",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 394,
+        "y": 257,
+        "width": 11,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-36a",
+      "id": "f-56",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 479,
+        "y": 224,
+        "width": 75,
+        "height": 14
+      }
+    },
+    {
+      "name": "c1-5",
+      "id": "f-57",
+      "type": "radiobuttongroup",
+      "layout": {
+        "page": 1,
+        "x": 432,
+        "y": 211,
+        "width": 132,
+        "height": 10
+      },
+      "choices": [
+        {
+          "value": "Yes",
+          "text": "Yes",
+          "source_name": "Yes"
+        },
+        {
+          "value": "No",
+          "text": "No",
+          "source_name": "No"
+        }
+      ]
+    },
+    {
+      "name": "f1-66",
+      "id": "f-58",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 147,
+        "y": 188,
+        "width": 144,
+        "height": 13
+      }
+    },
+    {
+      "name": "f1-67",
+      "id": "f-59",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 333,
+        "y": 188,
+        "width": 22,
+        "height": 12
+      }
+    },
+    {
+      "name": "f1-68",
+      "id": "f-60",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 356,
+        "y": 188,
+        "width": 62,
+        "height": 12
+      }
+    },
+    {
+      "name": "f1-69",
+      "id": "f-61",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 499,
+        "y": 189,
+        "width": 13,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-70",
+      "id": "f-62",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 513,
+        "y": 189,
+        "width": 13,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-71",
+      "id": "f-63",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 527,
+        "y": 189,
+        "width": 14,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-72",
+      "id": "f-64",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 542,
+        "y": 189,
+        "width": 13,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-73",
+      "id": "f-65",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 556,
+        "y": 189,
+        "width": 13,
+        "height": 11
+      }
+    },
+    {
+      "name": "f1-74",
+      "id": "f-66",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 348,
+        "y": 140,
+        "width": 127,
+        "height": 14
+      }
+    },
+    {
+      "name": "f1-75",
+      "id": "f-67",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 485,
+        "y": 140,
+        "width": 22,
+        "height": 12
+      }
+    },
+    {
+      "name": "f1-76",
+      "id": "f-68",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 509,
+        "y": 140,
+        "width": 68,
+        "height": 12
+      }
+    },
+    {
+      "name": "f1-77",
+      "id": "f-69",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 347,
+        "y": 117,
+        "width": 127,
+        "height": 13
+      }
+    },
+    {
+      "name": "c1-6",
+      "id": "f-70",
+      "type": "checkbox",
+      "layout": {
+        "page": 1,
+        "x": 454,
+        "y": 92,
+        "width": 8,
+        "height": 9
+      },
+      "value": false
+    },
+    {
+      "name": "f1-78",
+      "id": "f-71",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 476,
+        "y": 92,
+        "width": 102,
+        "height": 13
+      }
+    },
+    {
+      "name": "f1-79",
+      "id": "f-72",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 202,
+        "y": 80,
+        "width": 215,
+        "height": 10
+      }
+    },
+    {
+      "name": "f1-80",
+      "id": "f-73",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 203,
+        "y": 67,
+        "width": 214,
+        "height": 9
+      }
+    },
+    {
+      "name": "f1-81",
+      "id": "f-74",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 440,
+        "y": 80,
+        "width": 33,
+        "height": 9
+      }
+    },
+    {
+      "name": "f1-82",
+      "id": "f-75",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 477,
+        "y": 80,
+        "width": 101,
+        "height": 10
+      }
+    },
+    {
+      "name": "f1-83",
+      "id": "f-76",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 477,
+        "y": 68,
+        "width": 23,
+        "height": 8
+      }
+    },
+    {
+      "name": "f1-84",
+      "id": "f-77",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 502,
+        "y": 68,
+        "width": 76,
+        "height": 8
+      }
+    },
+    {
+      "name": "sigPrep",
+      "id": "f-78",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 159,
+        "y": 93,
+        "width": 126,
+        "height": 16
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": [
+        "f-0",
+        "f-1",
+        "f-7",
+        "f-8",
+        "f-9"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-2",
+        "f-3",
+        "f-10",
+        "f-11",
+        "f-12"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-4",
+        "f-5"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-6"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-13",
+        "f-14"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-15"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-16"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-17"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-18"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-19",
+        "f-20"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-21"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-22"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-23"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-25",
+        "f-24"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-26"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-27"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-29",
+        "f-30",
+        "f-31",
+        "f-32",
+        "f-33",
+        "f-34",
+        "f-35",
+        "f-36",
+        "f-37",
+        "f-28"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-40",
+        "f-38"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-39",
+        "f-41",
+        "f-42",
+        "f-43",
+        "f-44",
+        "f-45",
+        "f-46",
+        "f-47",
+        "f-48",
+        "f-49",
+        "f-50",
+        "f-51",
+        "f-52",
+        "f-53",
+        "f-54",
+        "f-55"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-57",
+        "f-56"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-58",
+        "f-59",
+        "f-60",
+        "f-61",
+        "f-62",
+        "f-63",
+        "f-64",
+        "f-65"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-66",
+        "f-67",
+        "f-68"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-69"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-78",
+        "f-72",
+        "f-74",
+        "f-70",
+        "f-71",
+        "f-75"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-73",
+        "f-76",
+        "f-77"
+      ],
+      "page_index": 1
+    }
+  ]
+}

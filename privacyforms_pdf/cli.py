@@ -5,38 +5,20 @@ from __future__ import annotations
 from importlib.metadata import version as get_version
 
 import click
+import pluggy
 
-from .commands import (
-    check_command,
-    create_extractor,
-    encrypt_command,
-    extract_command,
-    fill_form_command,
-    get_value_command,
-    info_command,
-    list_fields_command,
-    list_permissions_command,
-    set_permissions_command,
-)
-from .extractor import (
-    FormValidationError,
-    PDFField,
-    PDFFormError,
-    PDFFormExtractor,
-    PDFFormNotFoundError,
-)
+from .commands import create_extractor
+from .hooks import PDFFormsCommandsSpec
 
 # Re-export for backwards compatibility
 __all__ = [
     "create_extractor",
     "main",
-    # Exceptions for tests
-    "FormValidationError",
-    "PDFField",
-    "PDFFormError",
-    "PDFFormExtractor",
-    "PDFFormNotFoundError",
 ]
+
+pm = pluggy.PluginManager("privacyforms_pdf")
+pm.add_hookspecs(PDFFormsCommandsSpec)
+pm.load_setuptools_entrypoints("privacyforms_pdf.commands")
 
 
 @click.group()
@@ -45,23 +27,17 @@ __all__ = [
 def main(ctx: click.Context) -> None:
     """PDF Form extraction and manipulation tools using pypdf.
 
-    This CLI provides commands to extract, list, and fill PDF forms.
+    This CLI provides commands to parse, fill, and validate PDF forms.
     Uses pypdf library for all operations.
     """
     # Store context for subcommands
     ctx.ensure_object(dict)
 
 
-# Register commands
-main.add_command(check_command)
-main.add_command(encrypt_command)
-main.add_command(extract_command)
-main.add_command(list_fields_command)
-main.add_command(list_permissions_command)
-main.add_command(get_value_command)
-main.add_command(info_command)
-main.add_command(fill_form_command)
-main.add_command(set_permissions_command)
+# Register commands from plugins
+for cmd_list in pm.hook.register_commands():
+    for cmd in cmd_list:
+        main.add_command(cmd)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -322,9 +322,6 @@ graph TD
     B --> C[PDFFormNotFoundError]
     B --> D[FieldNotFoundError]
     B --> E[FormValidationError]
-    B -.->|deprecated alias| F[PDFCPUError]
-    B -.->|deprecated alias| G[PDFCPUNotFoundError]
-    B -.->|deprecated alias| H[PDFCPUExecutionError]
 ```
 
 ### Exception Usage Matrix
@@ -334,7 +331,7 @@ graph TD
 | `PDFFormNotFoundError` | `extract()`, `fill_form()` | PDF contains no AcroForm. |
 | `FormValidationError` | `fill_form()` with `validate=True` | Unknown field, type mismatch, or strict-mode missing field. |
 | `FieldNotFoundError` | *(public API)* | Explicit lookup by name/ID failed. |
-| `PDFCPUError` aliases | *(deprecated)* | Backwards compatibility with pre-pypdf versions. |
+
 
 ---
 

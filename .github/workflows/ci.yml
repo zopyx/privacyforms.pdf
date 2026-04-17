@@ -67,16 +67,6 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
-
-      - name: Install pdfcpu
-        run: |
-          go install github.com/pdfcpu/pdfcpu/cmd/pdfcpu@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
       - name: Install dependencies
         run: uv sync --group dev --python ${{ matrix.python-version }}
 

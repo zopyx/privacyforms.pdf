@@ -1,0 +1,212 @@
+{
+  "source": "SampleForm-1.pdf",
+  "fields": [
+    {
+      "name": "Name",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 672,
+        "width": 300,
+        "height": 13
+      },
+      "value": "Andreas"
+    },
+    {
+      "name": "Surname",
+      "id": "f-1",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 652,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "email",
+      "id": "f-2",
+      "type": "textfield",
+      "field_flags": {
+        "required": true
+      },
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 631,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "phone",
+      "id": "f-3",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 609,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Mobile",
+      "id": "f-4",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 588,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Street",
+      "id": "f-5",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 549,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "House",
+      "id": "f-6",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 529,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Town",
+      "id": "f-7",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 507,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Postcode",
+      "id": "f-8",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 486,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Country",
+      "id": "f-9",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 464,
+        "width": 300,
+        "height": 13
+      }
+    },
+    {
+      "name": "Comments",
+      "id": "f-10",
+      "type": "textarea",
+      "field_flags": {
+        "multiline": true
+      },
+      "layout": {
+        "page": 1,
+        "x": 180,
+        "y": 292,
+        "width": 300,
+        "height": 160
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": [
+        "f-0"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-1"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-2"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-3"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-4"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-5"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-6"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-7"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-8"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-9"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-10"
+      ],
+      "page_index": 1
+    }
+  ]
+}

@@ -1,0 +1,307 @@
+{
+  "source": "statementidentify.pdf",
+  "fields": [
+    {
+      "name": "First name of witness",
+      "id": "f-0",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 70,
+        "y": 553,
+        "width": 153,
+        "height": 13
+      }
+    },
+    {
+      "name": "Middle name of witness",
+      "id": "f-1",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 229,
+        "y": 553,
+        "width": 153,
+        "height": 13
+      }
+    },
+    {
+      "name": "Last name of witness",
+      "id": "f-2",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 390,
+        "y": 553,
+        "width": 150,
+        "height": 13
+      }
+    },
+    {
+      "name": "Street address of witness",
+      "id": "f-3",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 70,
+        "y": 522,
+        "width": 471,
+        "height": 14
+      }
+    },
+    {
+      "name": "City of witness",
+      "id": "f-4",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 70,
+        "y": 490,
+        "width": 152,
+        "height": 13
+      }
+    },
+    {
+      "name": "State of witness",
+      "id": "f-5",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 229,
+        "y": 491,
+        "width": 152,
+        "height": 12
+      }
+    },
+    {
+      "name": "Zip code of witness",
+      "id": "f-6",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 390,
+        "y": 492,
+        "width": 150,
+        "height": 12
+      }
+    },
+    {
+      "name": "Ten-digit phone number of witness",
+      "id": "f-7",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 70,
+        "y": 460,
+        "width": 152,
+        "height": 12
+      }
+    },
+    {
+      "name": "Witness's date of birth",
+      "id": "f-8",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 228,
+        "y": 459,
+        "width": 153,
+        "height": 12
+      }
+    },
+    {
+      "name": "Witness's relationship to applicant",
+      "id": "f-9",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 390,
+        "y": 458,
+        "width": 152,
+        "height": 13
+      }
+    },
+    {
+      "name": "First name of applicant",
+      "id": "f-10",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 69,
+        "y": 411,
+        "width": 125,
+        "height": 13
+      }
+    },
+    {
+      "name": "Middle name of applicant",
+      "id": "f-11",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 201,
+        "y": 411,
+        "width": 109,
+        "height": 13
+      }
+    },
+    {
+      "name": "Last name of applicant",
+      "id": "f-12",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 318,
+        "y": 411,
+        "width": 138,
+        "height": 13
+      }
+    },
+    {
+      "name": "Applicant's date of birth",
+      "id": "f-13",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 463,
+        "y": 410,
+        "width": 78,
+        "height": 13
+      }
+    },
+    {
+      "name": "First name on birth record",
+      "id": "f-14",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 69,
+        "y": 362,
+        "width": 125,
+        "height": 14
+      }
+    },
+    {
+      "name": "Middle name on birth record",
+      "id": "f-15",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 204,
+        "y": 361,
+        "width": 108,
+        "height": 14
+      }
+    },
+    {
+      "name": "Last name on birth record",
+      "id": "f-16",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 319,
+        "y": 361,
+        "width": 138,
+        "height": 14
+      }
+    },
+    {
+      "name": "Date of birth/death",
+      "id": "f-17",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 462,
+        "y": 361,
+        "width": 79,
+        "height": 14
+      }
+    },
+    {
+      "name": "number of years",
+      "id": "f-18",
+      "type": "textfield",
+      "layout": {
+        "page": 1,
+        "x": 401,
+        "y": 336,
+        "width": 20,
+        "height": 12
+      }
+    },
+    {
+      "name": "today's date",
+      "id": "f-19",
+      "type": "datefield",
+      "layout": {
+        "page": 1,
+        "x": 418,
+        "y": 220,
+        "width": 111,
+        "height": 15
+      }
+    }
+  ],
+  "rows": [
+    {
+      "fields": [
+        "f-0",
+        "f-1",
+        "f-2"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-3"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-4",
+        "f-5",
+        "f-6"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-7",
+        "f-8",
+        "f-9"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-10",
+        "f-11",
+        "f-12",
+        "f-13"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-14",
+        "f-15",
+        "f-16",
+        "f-17"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-18"
+      ],
+      "page_index": 1
+    },
+    {
+      "fields": [
+        "f-19"
+      ],
+      "page_index": 1
+    }
+  ]
+}
