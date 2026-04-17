@@ -44,7 +44,7 @@ class TestValidatePDFPath:
         """Test valid PDF path."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         service._validate_pdf_path(test_file)
 
     def test_nonexistent_file(self, tmp_path: Path) -> None:
@@ -59,6 +59,24 @@ class TestValidatePDFPath:
         with pytest.raises(FileNotFoundError):
             service._validate_pdf_path(tmp_path)
 
+    def test_symlink_rejected(self, tmp_path: Path) -> None:
+        """Test symlink path raises ValueError."""
+        service = PDFFormService()
+        real_file = tmp_path / "real.pdf"
+        real_file.write_bytes(b"%PDF-1.4\n")
+        symlink = tmp_path / "link.pdf"
+        symlink.symlink_to(real_file)
+        with pytest.raises(ValueError, match="Symlinks are not allowed"):
+            service._validate_pdf_path(symlink)
+
+    def test_invalid_pdf_magic_rejected(self, tmp_path: Path) -> None:
+        """Test non-PDF file raises ValueError."""
+        service = PDFFormService()
+        text_file = tmp_path / "not_a_pdf.pdf"
+        text_file.write_text("This is not a PDF", encoding="utf-8")
+        with pytest.raises(ValueError, match="does not appear to be a valid PDF"):
+            service._validate_pdf_path(text_file)
+
 
 class TestHasForm:
     """Tests for has_form method."""
@@ -67,7 +85,7 @@ class TestHasForm:
         """Test PDF with form returns True."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {}}
@@ -79,7 +97,7 @@ class TestHasForm:
         """Test PDF without form returns False."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = None
@@ -95,7 +113,7 @@ class TestExtractFacade:
         """Test extract delegates to parse_pdf."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         expected = MagicMock()
 
         with patch("privacyforms_pdf.extractor.parse_pdf", return_value=expected):
@@ -106,7 +124,7 @@ class TestExtractFacade:
         """Test extract_to_json writes parsed representation JSON."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "out.json"
         representation = MagicMock()
         representation.to_compact_json.return_value = '{"fields": []}'
@@ -116,11 +134,29 @@ class TestExtractFacade:
             mock_extract.assert_called_once_with(test_file, source=None)
             assert output_file.read_text(encoding="utf-8") == '{"fields": []}'
 
+    def test_extract_to_json_rejects_symlink_output(self, tmp_path: Path) -> None:
+        """Test extract_to_json refuses to write through a symlink."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        real_file = tmp_path / "real.json"
+        real_file.write_text("secret", encoding="utf-8")
+        output_symlink = tmp_path / "out.json"
+        output_symlink.symlink_to(real_file)
+        representation = MagicMock()
+        representation.to_compact_json.return_value = '{"fields": []}'
+
+        with patch.object(service, "extract", return_value=representation):
+            with pytest.raises(ValueError, match="Refusing to write to symlink"):
+                service.extract_to_json(test_file, output_symlink)
+
+        assert real_file.read_text(encoding="utf-8") == "secret"
+
     def test_list_fields_returns_representation_fields(self, tmp_path: Path) -> None:
         """Test list_fields returns the parsed fields."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         field = MagicMock()
         representation = MagicMock(fields=[field])
 
@@ -131,7 +167,7 @@ class TestExtractFacade:
         """Test get_field_by_id, get_field_by_name, and get_field_value."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         field = MagicMock(value="Jane")
         representation = MagicMock()
         representation.get_field_by_id.return_value = field
@@ -146,7 +182,7 @@ class TestExtractFacade:
         """Test PDF with empty fields dict returns False."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {}
@@ -227,7 +263,7 @@ class TestValidateFormData:
         """Test validation with valid form data."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
@@ -240,7 +276,7 @@ class TestValidateFormData:
         """Test validation fails for unknown field."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
@@ -254,7 +290,7 @@ class TestValidateFormData:
         """Test validation catches non-bool checkbox value."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Agree": {"/FT": "/Btn", "/V": "/Off"}}
@@ -267,7 +303,7 @@ class TestValidateFormData:
         """Test strict mode requires all fields."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
@@ -280,7 +316,7 @@ class TestValidateFormData:
         """Test validation returns error when PDF has no form."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = None
@@ -293,7 +329,7 @@ class TestValidateFormData:
         """Test allow_extra_fields permits unknown keys."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
@@ -308,7 +344,7 @@ class TestValidateFormData:
         """Test validation catches PdfReader exception."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         with patch("privacyforms_pdf.extractor.PdfReader", side_effect=Exception("corrupted")):
             errors = service.validate_form_data(test_file, {"Name": "John"})
@@ -319,7 +355,7 @@ class TestValidateFormData:
         """Test strict mode requires all fields with loop continuation."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {
@@ -336,7 +372,7 @@ class TestValidateFormData:
         """Test validation supports field IDs when requested."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
         parsed_field = type("ParsedField", (), {"id": "f-0", "name": "Name"})()
@@ -353,7 +389,7 @@ class TestValidateFormData:
         """Test auto key mode accepts mixed name and ID keys."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {
             "Name": {"/FT": "/Tx"},
@@ -382,7 +418,7 @@ class TestFillForm:
         """Test fill_form raises when PDF has no form."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = None
@@ -397,7 +433,7 @@ class TestFillForm:
         """Test fill_form raises on validation failure."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         mock_reader = MagicMock()
         mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
@@ -412,7 +448,7 @@ class TestFillForm:
         """Test fill_form delegates to FormFiller.fill."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -430,7 +466,7 @@ class TestFillForm:
         """Test fill_form fallback is used for pypdf appearance-stream bug."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -458,7 +494,7 @@ class TestFillForm:
         """Test fill_form with validate=True and valid data delegates to filler."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -476,7 +512,7 @@ class TestFillForm:
         """Test fill_form maps field IDs to names before delegating to the filler."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -503,7 +539,7 @@ class TestFillForm:
         """Test fill_form raises when two keys map to the same form field."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -532,7 +568,7 @@ class TestFillFormFromJson:
         """Test fill_form_from_json reads JSON and delegates."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "John"}')
         output_file = tmp_path / "output.pdf"
@@ -552,7 +588,7 @@ class TestFillFormFromJson:
         """Test fill_form_from_json raises when JSON not found."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         with pytest.raises(FileNotFoundError):
             service.fill_form_from_json(test_file, tmp_path / "missing.json")
@@ -561,7 +597,7 @@ class TestFillFormFromJson:
         """Test fill_form_from_json raises when JSON path is a directory."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         json_dir = tmp_path / "data_dir"
         json_dir.mkdir()
 
@@ -572,7 +608,7 @@ class TestFillFormFromJson:
         """Test fill_form_from_json rejects overly nested JSON."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         deep: dict[str, object] = {"key": "value"}
         for _ in range(55):
@@ -586,7 +622,7 @@ class TestFillFormFromJson:
         """Test fill_form_from_json rejects non-object JSON payloads."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('["not", "an", "object"]', encoding="utf-8")
 

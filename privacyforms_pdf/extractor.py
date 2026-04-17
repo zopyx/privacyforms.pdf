@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -101,7 +102,10 @@ class PDFFormService:
     ) -> None:
         """Write the canonical parsed representation to a JSON file."""
         representation = self.extract(pdf_path, source=source)
-        Path(output_path).write_text(representation.to_compact_json(indent=2), encoding="utf-8")
+        out = Path(output_path)
+        if out.is_symlink():
+            raise ValueError(f"Refusing to write to symlink: {out}")
+        out.write_text(representation.to_compact_json(indent=2), encoding="utf-8")
 
     def list_fields(self, pdf_path: str | Path) -> list[PDFField]:
         """Return parsed fields for the given PDF."""
@@ -319,11 +323,19 @@ class PDFFormService:
         )
 
     def _validate_pdf_path(self, pdf_path: Path) -> None:
-        """Validate that the PDF path exists and is a file."""
+        """Validate that the PDF path exists, is a regular file, and looks like a PDF."""
+        if pdf_path.is_symlink():
+            raise ValueError(f"Symlinks are not allowed: {pdf_path}")
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
         if not pdf_path.is_file():
             raise FileNotFoundError(f"Path is not a file: {pdf_path}")
+        if not stat.S_ISREG(pdf_path.stat().st_mode):
+            raise ValueError(f"Path is not a regular file: {pdf_path}")
+        with pdf_path.open("rb") as f:
+            header = f.read(4)
+            if header != b"%PDF":
+                raise ValueError(f"File does not appear to be a valid PDF: {pdf_path}")
 
     def _fill_form_fields_without_appearance(
         self,

@@ -31,7 +31,7 @@ class TestFillFormCommand:
     def test_fill_form_success(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command succeeds with valid data."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Candidate Name": "John Smith", "Full time": true}')
         output_file = tmp_path / "output.pdf"
@@ -53,7 +53,7 @@ class TestFillFormCommand:
     def test_fill_form_validation_failure(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command fails on validation error."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Unknown": "value"}')
 
@@ -64,7 +64,7 @@ class TestFillFormCommand:
     def test_fill_form_no_validate(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command with --no-validate flag."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
         output_file = tmp_path / "output.pdf"
@@ -91,7 +91,7 @@ class TestFillFormCommand:
     def test_fill_form_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command when PDF has no form."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
@@ -109,7 +109,7 @@ class TestFillFormCommand:
     def test_fill_form_invalid_json(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command with invalid JSON."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text("not valid json")
 
@@ -120,7 +120,7 @@ class TestFillFormCommand:
     def test_fill_form_in_place(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command without output path (modifies in place)."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
@@ -137,7 +137,7 @@ class TestFillFormCommand:
     def test_fill_form_strict_mode(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command with --strict flag."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "John"}')
 
@@ -153,7 +153,7 @@ class TestFillFormCommand:
     def test_fill_form_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command handles PDFFormError."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
@@ -170,7 +170,7 @@ class TestFillFormCommand:
     def test_fill_form_checkbox_validation_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command validation fails with checkbox type error."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Agree": "not-a-boolean"}')
 
@@ -186,7 +186,7 @@ class TestFillFormCommand:
     def test_fill_form_with_field_id_keys(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form command supports field IDs through --field-keys=id."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"f-0": "John Smith"}')
         output_file = tmp_path / "output.pdf"
@@ -216,7 +216,7 @@ class TestFillFormCommand:
     def test_fill_form_non_object_json(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form rejects non-object JSON payloads."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('["not", "an", "object"]')
 
@@ -227,7 +227,7 @@ class TestFillFormCommand:
     def test_fill_form_no_validate_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form handles PDFFormNotFoundError when validation is skipped."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 
@@ -244,7 +244,7 @@ class TestFillFormCommand:
     ) -> None:
         """Test fill-form command handles FormValidationError from extractor."""
         pdf_file = tmp_path / "test.pdf"
-        pdf_file.touch()
+        pdf_file.write_bytes(b"%PDF-1.4\n")
         json_file = tmp_path / "data.json"
         json_file.write_text('{"Name": "test"}')
 

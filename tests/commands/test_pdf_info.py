@@ -20,7 +20,7 @@ class TestInfoCommand:
     def test_info_has_form(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test info command when PDF has form."""
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         with patch("privacyforms_pdf.extractor.PDFFormService.has_form", return_value=True):
             result = runner.invoke(main, ["info", str(test_file)])
@@ -30,7 +30,7 @@ class TestInfoCommand:
     def test_info_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test info command when PDF has no form."""
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         with patch("privacyforms_pdf.extractor.PDFFormService.has_form", return_value=False):
             result = runner.invoke(main, ["info", str(test_file)])
@@ -40,7 +40,7 @@ class TestInfoCommand:
     def test_info_execution_error(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test info command handles PDFFormError."""
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
 
         with patch(
             "privacyforms_pdf.extractor.PDFFormService.has_form",
