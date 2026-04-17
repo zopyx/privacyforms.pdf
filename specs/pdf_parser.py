@@ -345,6 +345,21 @@ def _collect_annotation_info(
     return name_map, ref_map
 
 
+def extract_pdf_form(pdf_filename: Path | str) -> PDFRepresentation:
+    """Extract PDF form data into the PDFRepresentation schema.
+
+    This is a public facade that parses a fillable PDF and returns a
+    Pydantic-validated PDFRepresentation object.
+
+    Args:
+        pdf_filename: Path to the PDF file to parse.
+
+    Returns:
+        PDFRepresentation containing all extracted fields, layout, and rows.
+    """
+    return parse_pdf(Path(pdf_filename))
+
+
 def parse_pdf(pdf_path: Path | str, source: str | None = None) -> PDFRepresentation:
     """Parse a PDF form into PDFRepresentation.
 

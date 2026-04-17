@@ -19,7 +19,6 @@ from .extractor import (
     PDFFormExtractor,
     PDFFormNotFoundError,
     cluster_y_positions,
-    extract_pdf_form,
     get_available_geometry_backends,
     has_geometry_support,
 )

@@ -1,6 +1,6 @@
 """PDF form schema and parser specifications."""
 
-from .pdf_parser import parse_pdf
+from .pdf_parser import extract_pdf_form, parse_pdf
 from .pdf_schema import (
     ChoiceOption,
     FieldFlags,
@@ -19,5 +19,6 @@ __all__ = [
     "PDFFieldType",
     "PDFRepresentation",
     "RowGroup",
+    "extract_pdf_form",
     "parse_pdf",
 ]
