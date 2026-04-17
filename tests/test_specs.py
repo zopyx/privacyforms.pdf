@@ -327,3 +327,40 @@ class TestPDFParserCLI:
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
         assert "--by-id" in result.output
+
+
+class TestVerifyFormJsonCLI:
+    """Tests for the verify_form_json CLI."""
+
+    def test_valid_json(self, runner: CliRunnerType, tmp_path: Path) -> None:
+        """Test verify_form_json succeeds on valid JSON."""
+        from specs.pdf_schema import PDFField, PDFRepresentation
+
+        rep = PDFRepresentation(fields=[PDFField(name="A", id="f-1", type="textfield")])
+        json_path = tmp_path / "valid.json"
+        json_path.write_text(rep.to_compact_json())
+
+        from specs.verify_form_json import main as verify_main
+
+        result = runner.invoke(verify_main, [str(json_path)])
+        assert result.exit_code == 0
+        assert "Valid:" in result.output
+
+    def test_invalid_json(self, runner: CliRunnerType, tmp_path: Path) -> None:
+        """Test verify_form_json fails on invalid JSON."""
+        json_path = tmp_path / "invalid.json"
+        json_path.write_text('{"bad": true}')
+
+        from specs.verify_form_json import main as verify_main
+
+        result = runner.invoke(verify_main, [str(json_path)])
+        assert result.exit_code != 0
+        assert "Invalid:" in result.output
+
+    def test_verify_help(self, runner: CliRunnerType) -> None:
+        """Test verify_form_json shows help."""
+        from specs.verify_form_json import main as verify_main
+
+        result = runner.invoke(verify_main, ["--help"])
+        assert result.exit_code == 0
+        assert "JSON_FILE" in result.output
