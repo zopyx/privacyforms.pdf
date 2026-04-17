@@ -56,7 +56,7 @@ __all__ = [
     "PDFCPUExecutionError",
     "PDFCPUNotFoundError",
     "cluster_y_positions",
-    "extract_pdf_forms",
+    "extract_pdf_form",
     "get_available_geometry_backends",
     "has_geometry_support",
     "is_pdfcpu_available",
@@ -657,7 +657,7 @@ class PDFFormExtractor:
         )
 
 
-def extract_pdf_forms(pdf_filename: str | Path) -> "PDFRepresentation":
+def extract_pdf_form(pdf_filename: str | Path) -> "PDFRepresentation":
     """Extract PDF form data into the PDFRepresentation schema.
 
     This is a public facade that parses a fillable PDF and returns a
@@ -672,6 +672,5 @@ def extract_pdf_forms(pdf_filename: str | Path) -> "PDFRepresentation":
     from pathlib import Path
 
     from specs.pdf_parser import parse_pdf
-    from specs.pdf_schema import PDFRepresentation
 
     return parse_pdf(Path(pdf_filename))
