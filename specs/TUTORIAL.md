@@ -89,6 +89,115 @@ If you want a Python dictionary first:
 payload = document.model_dump()
 ```
 
+## Example: Textarea and Combo Box
+
+This example adds a multiline text area and an editable combo box:
+
+```python
+from pdf_schema import ChoiceOption, FieldFlags, FieldLayout, PDFField
+
+comments = PDFField(
+    id="f-4",
+    name="Comments",
+    title="Additional comments",
+    type="textarea",
+    layout=FieldLayout(page=0, x=80, y=120, width=280, height=80),
+    value="Available to start in May.",
+    textarea_rows=4,
+    textarea_cols=40,
+)
+
+department = PDFField(
+    id="f-5",
+    name="Department",
+    title="Preferred department",
+    type="combobox",
+    field_flags=FieldFlags(combo=True, edit=True),
+    layout=FieldLayout(page=0, x=80, y=80, width=180, height=22),
+    value="engineering",
+    choices=[
+        ChoiceOption(value="engineering", text="Engineering"),
+        ChoiceOption(value="sales", text="Sales"),
+        ChoiceOption(value="operations", text="Operations"),
+    ],
+)
+```
+
+## Example: Multi-select List Box
+
+List-valued `listbox` fields require `field_flags.multi_select=True`:
+
+```python
+from pdf_schema import ChoiceOption, FieldFlags, PDFField
+
+skills = PDFField(
+    id="f-6",
+    name="Skills",
+    title="Skills",
+    type="listbox",
+    field_flags=FieldFlags(multi_select=True),
+    value=["python", "pdf"],
+    choices=[
+        ChoiceOption(value="python", text="Python"),
+        ChoiceOption(value="pdf", text="PDF processing"),
+        ChoiceOption(value="cli", text="CLI tooling"),
+    ],
+)
+```
+
+Without `FieldFlags(multi_select=True)`, a list value would fail validation.
+
+## Example: Lookup and Update a Field
+
+After construction, you can retrieve fields by id or original name and update them:
+
+```python
+field = document.get_field_by_id("f-1")
+if field is not None:
+    field.value = "part_time"
+
+terms = document.get_field_by_name("AcceptTerms")
+if terms is not None:
+    terms.value = True
+```
+
+Because `PDFRepresentation` uses assignment validation, invalid replacements in
+`document.fields` or `document.rows` will be checked as well.
+
+## Example: Validation Errors
+
+The models reject inconsistent field definitions early:
+
+```python
+from pydantic import ValidationError
+from pdf_schema import PDFField
+
+try:
+    PDFField(
+        id="bad-1",
+        name="BadCheckbox",
+        type="checkbox",
+        value="yes",  # invalid: checkbox values must be bool
+    )
+except ValidationError as exc:
+    print(exc)
+```
+
+Another common error is attaching `choices` to a text field or using
+`textarea_rows` on a non-`textarea` field.
+
+## Example: JSON Round-trip
+
+You can validate incoming JSON by parsing it back into the model:
+
+```python
+json_text = document.model_dump_json(indent=2)
+restored = PDFRepresentation.model_validate_json(json_text)
+
+assert restored.get_field_by_name("EmploymentType") is not None
+assert restored.spec_version == "1.0"
+```
+
 Serialization notes:
 
 - `None` values are included by default unless you pass `exclude_none=True`
