@@ -435,3 +435,9 @@ class PDFRepresentation(BaseModel):
     def to_compact_json(self, *, indent: int = 2) -> str:
         """Serialize to a compact JSON string, omitting None values and defaults."""
         return self.model_dump_json(exclude_none=True, exclude_defaults=True, indent=indent)
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        "pdf_schema.py is a module, not a CLI script. Use pdf_parser.py to parse PDF files instead."
+    )
