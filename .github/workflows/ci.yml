@@ -50,6 +50,24 @@ jobs:
       - name: Run type checker
         run: uv run --python 3.14.3 ty check
 
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install Python 3.14.3
+        run: uv python install 3.14.3
+
+      - name: Install dependencies
+        run: uv sync --group dev --python 3.14.3
+
+      - name: Run pip-audit
+        run: uv run --python 3.14.3 pip-audit
+
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
