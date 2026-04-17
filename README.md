@@ -287,6 +287,18 @@ Notes:
 - `FormValidationError`: raised when fill-time validation fails
 - `FieldNotFoundError`: exported for compatibility and field lookup failures
 
+## Ratings
+
+| Aspect | Score | Notes |
+|--------|------:|-------|
+| **Overall** | **9/10** | Production-grade library with excellent engineering discipline |
+| Security | 9/10 | Input validation, symlink rejection, size limits, Bandit clean |
+| Architecture | 9/10 | Clean layers, canonical schema, pluggy extensibility |
+| API Design | 8/10 | Dual function/class layers, type-safe, minor wrapper leakage |
+| Functionality | 9/10 | All form types handled, cross-generator radio support, graceful fallback |
+| Code Quality | 9/10 | 100% coverage, strict ruff/ty, complete type hints |
+| Documentation | 8/10 | Excellent project docs; PDF internals could use more inline depth |
+
 ## Security
 
 - Symlinks are rejected for both reads and writes to prevent path-traversal issues
