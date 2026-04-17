@@ -79,3 +79,14 @@ intent.md
 /out_test_no.pdf
 /test_data.json
 /test_data_no.json
+
+# Audit artifacts
+/bandit-report.json
+/pip-audit-report.json
+/semgrep-report.json
+/pdfrepresentation-schema.json
+/Form.pdf
+/encrypted.pdf
+/filled_output.pdf
+/forms.pdf
+/x-*.pdf
