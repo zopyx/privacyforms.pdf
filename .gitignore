@@ -62,6 +62,4 @@ pyrightconfig.json
 Thumbs.db
 
 # Project specific
-*.pdf
-!FilledForm.pdf
 intent.md
