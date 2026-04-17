@@ -86,7 +86,7 @@ class TestMain:
 
         def dump_side_effect(data: object, fp: object, **kwargs: object) -> None:
             nonlocal json_data
-            json_data = data  # type: ignore[assignment]
+            json_data = data  # type: ignore
 
         with (
             patch("demo.fill_sample.Path") as mock_path_cls,

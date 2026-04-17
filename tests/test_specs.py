@@ -55,12 +55,12 @@ class TestPDFSchemaValidation:
     def test_extra_field_rejected(self) -> None:
         """Test extra fields are rejected in strict mode."""
         with pytest.raises(ValueError):
-            PDFField(name="Name", id="f-1", type="textfield", unknown_field="x")  # type: ignore[call-arg]
+            PDFField(name="Name", id="f-1", type="textfield", unknown_field="x")  # type: ignore
 
     def test_coercion_rejected_for_id(self) -> None:
         """Test integer ids are not coerced to strings."""
         with pytest.raises(ValueError):
-            PDFField(name="Name", id=123, type="textfield")  # type: ignore[arg-type]
+            PDFField(name="Name", id=123, type="textfield")  # type: ignore
 
     def test_datefield_only_allows_format(self) -> None:
         """Test format is only valid on datefield."""
