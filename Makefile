@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint format type-check check clean run build upload upload-test release ci
+.PHONY: help install install-dev test test-cov lint format type-check check audit clean run build upload upload-test release ci
 
 VERSION := $(shell uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 TAG ?= v$(VERSION)
@@ -14,7 +14,8 @@ help:
 	@echo "  format       - Format code (ruff format)"
 	@echo "  format-check - Check code formatting"
 	@echo "  type-check   - Run type checker (pyright)"
-	@echo "  check        - Run all checks (lint, format-check, type-check)"
+	@echo "  audit        - Run security audit (pip-audit)"
+	@echo "  check        - Run all checks (lint, format-check, type-check, audit)"
 	@echo "  fix          - Fix auto-fixable issues (ruff check --fix)"
 	@echo "  clean        - Clean build artifacts and cache files"
 	@echo "  run          - Run the CLI (use ARGS='<args>')"
@@ -55,7 +56,10 @@ format-check:
 type-check:
 	uv run ty check
 
-check: lint format-check type-check
+audit:
+	uv run pip-audit
+
+check: lint format-check type-check audit
 	@echo "All checks passed!"
 
 fix:
