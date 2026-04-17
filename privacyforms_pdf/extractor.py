@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -31,12 +30,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Re-export all public names for backwards compatibility
+# Public API
 __all__ = [
     "FieldNotFoundError",
     "FormValidationError",
     "PDFFormError",
-    "PDFFormExtractor",
     "PDFFormNotFoundError",
     "PDFFormService",
     "cluster_y_positions",
@@ -389,27 +387,3 @@ class PDFFormService:
         return self._filler._build_listbox_appearance_stream(
             writer, annotation, parent_annotation, selected_index
         )
-
-
-class PDFFormExtractor(PDFFormService):
-    """Deprecated alias for PDFFormService.
-
-    .. deprecated::
-        Use :class:`PDFFormService` instead.
-    """
-
-    def __init__(
-        self,
-        timeout_seconds: float = 30.0,
-        extract_geometry: bool = True,
-    ) -> None:
-        """Initialize with a deprecation warning."""
-        warnings.warn(
-            (
-                "PDFFormExtractor is deprecated and will be removed in a future version. "
-                "Use PDFFormService instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(timeout_seconds=timeout_seconds, extract_geometry=extract_geometry)

@@ -10,7 +10,6 @@ import pytest
 
 from privacyforms_pdf.extractor import (
     FormValidationError,
-    PDFFormExtractor,
     PDFFormNotFoundError,
     PDFFormService,
     cluster_y_positions,
@@ -36,11 +35,6 @@ class TestPDFFormServiceInitialization:
         service = PDFFormService(timeout_seconds=60.0, extract_geometry=False)
         assert service._timeout_seconds == 60.0
         assert service._extract_geometry is False
-
-    def test_deprecated_alias_emits_warning(self) -> None:
-        """Test that PDFFormExtractor emits a DeprecationWarning."""
-        with pytest.warns(DeprecationWarning, match="PDFFormExtractor is deprecated"):
-            PDFFormExtractor()
 
 
 class TestValidatePDFPath:
@@ -166,57 +160,57 @@ class TestGetFieldHelpers:
 
     def test_get_field_type_textfield(self) -> None:
         """Test textfield type detection."""
-        assert PDFFormExtractor._get_field_type({"/FT": "/Tx"}) == "textfield"
+        assert PDFFormService._get_field_type({"/FT": "/Tx"}) == "textfield"
 
     def test_get_field_type_checkbox(self) -> None:
         """Test checkbox type detection."""
-        assert PDFFormExtractor._get_field_type({"/FT": "/Btn", "/V": "/Off"}) == "checkbox"
+        assert PDFFormService._get_field_type({"/FT": "/Btn", "/V": "/Off"}) == "checkbox"
 
     def test_get_field_type_radiobuttongroup(self) -> None:
         """Test radiobuttongroup type detection."""
         assert (
-            PDFFormExtractor._get_field_type({"/FT": "/Btn", "/Opt": ["A", "B"]})
+            PDFFormService._get_field_type({"/FT": "/Btn", "/Opt": ["A", "B"]})
             == "radiobuttongroup"
         )
 
     def test_get_field_value_bool(self) -> None:
         """Test boolean value extraction."""
-        assert PDFFormExtractor._get_field_value({"/V": "/Yes"}) is True
-        assert PDFFormExtractor._get_field_value({"/V": "/Off"}) is False
+        assert PDFFormService._get_field_value({"/V": "/Yes"}) is True
+        assert PDFFormService._get_field_value({"/V": "/Off"}) is False
 
     def test_get_field_value_string(self) -> None:
         """Test string value extraction."""
-        assert PDFFormExtractor._get_field_value({"/V": "hello"}) == "hello"
+        assert PDFFormService._get_field_value({"/V": "hello"}) == "hello"
 
     def test_get_field_options_from_opt(self) -> None:
         """Test options extraction from /Opt."""
-        assert PDFFormExtractor._get_field_options({"/Opt": ["A", "B"]}) == ["A", "B"]
+        assert PDFFormService._get_field_options({"/Opt": ["A", "B"]}) == ["A", "B"]
 
     def test_get_field_value_none(self) -> None:
         """Test returning empty string when value is None."""
-        assert PDFFormExtractor._get_field_value({}) == ""
+        assert PDFFormService._get_field_value({}) == ""
 
     def test_get_field_value_name_object_yes(self) -> None:
         """Test NameObject with yes returns True."""
         mock_name = MagicMock()
         mock_name.name = "/Yes"
-        assert PDFFormExtractor._get_field_value({"/V": mock_name}) is True
+        assert PDFFormService._get_field_value({"/V": mock_name}) is True
 
     def test_get_field_value_name_object_off(self) -> None:
         """Test NameObject with off returns False."""
         mock_name = MagicMock()
         mock_name.name = "/Off"
-        assert PDFFormExtractor._get_field_value({"/V": mock_name}) is False
+        assert PDFFormService._get_field_value({"/V": mock_name}) is False
 
     def test_get_field_value_name_object_other(self) -> None:
         """Test NameObject with arbitrary value returns string."""
         mock_name = MagicMock()
         mock_name.name = "/SomeName"
-        assert PDFFormExtractor._get_field_value({"/V": mock_name}) == "/SomeName"
+        assert PDFFormService._get_field_value({"/V": mock_name}) == "/SomeName"
 
     def test_get_field_value_non_str_object(self) -> None:
         """Test non-string, non-name value returns str(value)."""
-        assert PDFFormExtractor._get_field_value({"/V": 123}) == "123"
+        assert PDFFormService._get_field_value({"/V": 123}) == "123"
 
 
 class TestValidateFormData:
