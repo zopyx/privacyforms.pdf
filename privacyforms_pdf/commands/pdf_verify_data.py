@@ -52,9 +52,20 @@ def _require_json_object(data: object) -> dict[str, object]:
     """Require a top-level JSON object for sample form data."""
     if not isinstance(data, Mapping):
         raise click.ClickException(
-            "Sample data JSON must be a top-level object with field IDs as keys"
+            "Sample data JSON must be a top-level object with field names or field IDs as keys"
         )
     return {str(key): value for key, value in data.items()}
+
+
+def _valid_field_keys(form_data: PDFRepresentation, key_mode: str) -> set[str]:
+    """Return the set of allowed sample-data keys for the selected key mode."""
+    ids = {field.id for field in form_data.fields}
+    names = {field.name for field in form_data.fields}
+    if key_mode == "id":
+        return ids
+    if key_mode == "name":
+        return names
+    return ids | names
 
 
 @click.command(name="verify-data")
@@ -70,8 +81,15 @@ def _require_json_object(data: object) -> dict[str, object]:
     type=click.Path(exists=True, path_type=Path),
     help="Path to the sample data JSON file with key:value pairs.",
 )
-def verify_data_command(form_json: Path, data_json: Path) -> None:
-    """Validate that all keys in --data-json exist as field IDs in --form-json."""
+@click.option(
+    "--key-mode",
+    type=click.Choice(["id", "name", "auto"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Validate sample data keys as field IDs, field names, or either.",
+)
+def verify_data_command(form_json: Path, data_json: Path, key_mode: str) -> None:
+    """Validate that all keys in --data-json exist in --form-json."""
     _check_json_size(form_json)
     _check_json_size(data_json)
 
@@ -81,12 +99,18 @@ def verify_data_command(form_json: Path, data_json: Path) -> None:
     data_text = data_json.read_text(encoding="utf-8")
     sample_data = _require_json_object(_safe_json_loads(data_text))
 
-    valid_ids = {field.id for field in form_data.fields}
+    valid_keys = _valid_field_keys(form_data, key_mode)
     errors: list[str] = []
 
     for key in sample_data:
-        if key not in valid_ids:
-            errors.append(f"Key '{key}' not found in form field IDs")
+        if key not in valid_keys:
+            if key_mode == "id":
+                label = "field IDs"
+            elif key_mode == "name":
+                label = "field names"
+            else:
+                label = "field names or IDs"
+            errors.append(f"Key '{key}' not found in form {label}")
 
     if errors:
         message = "Validation failed with {} error(s):\n  - {}".format(

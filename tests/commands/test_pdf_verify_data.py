@@ -82,6 +82,52 @@ class TestVerifyDataCommand:
         assert result.exit_code == 0
         assert "Valid" in result.output
 
+    def test_verify_data_success_with_name_keys(self, tmp_path: Path) -> None:
+        """Test verify-data with matching field-name keys."""
+        runner = CliRunner()
+        form_json = tmp_path / "form.json"
+        form_json.write_text(
+            '{"spec_version": "1.0", "source": "test.pdf", '
+            '"fields": [{"name": "Candidate Name", "id": "f-0", "type": "textfield"}], '
+            '"rows": []}'
+        )
+        data_json = tmp_path / "data.json"
+        data_json.write_text('{"Candidate Name": "John"}')
+
+        result = runner.invoke(
+            main,
+            [
+                "verify-data",
+                "--form-json",
+                str(form_json),
+                "--data-json",
+                str(data_json),
+                "--key-mode",
+                "name",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Valid" in result.output
+
+    def test_verify_data_success_with_auto_keys(self, tmp_path: Path) -> None:
+        """Test verify-data with mixed field-name and field-ID keys."""
+        runner = CliRunner()
+        form_json = tmp_path / "form.json"
+        form_json.write_text(
+            '{"spec_version": "1.0", "source": "test.pdf", '
+            '"fields": [{"name": "Candidate Name", "id": "f-0", "type": "textfield"}, '
+            '{"name": "Agree", "id": "f-1", "type": "checkbox"}], "rows": []}'
+        )
+        data_json = tmp_path / "data.json"
+        data_json.write_text('{"Candidate Name": "John", "f-1": true}')
+
+        result = runner.invoke(
+            main,
+            ["verify-data", "--form-json", str(form_json), "--data-json", str(data_json)],
+        )
+        assert result.exit_code == 0
+        assert "Valid" in result.output
+
     def test_verify_data_json_too_large(self, tmp_path: Path) -> None:
         """Test verify-data fails when a JSON file exceeds the size limit."""
         runner = CliRunner()
@@ -129,6 +175,33 @@ class TestVerifyDataCommand:
         )
         assert result.exit_code != 0
         assert "must be a top-level object" in result.output
+
+    def test_verify_data_name_mode_reports_name_lookup(self, tmp_path: Path) -> None:
+        """Test verify-data name mode reports missing field names."""
+        runner = CliRunner()
+        form_json = tmp_path / "form.json"
+        form_json.write_text(
+            '{"spec_version": "1.0", "source": "test.pdf", '
+            '"fields": [{"name": "Candidate Name", "id": "f-0", "type": "textfield"}], '
+            '"rows": []}'
+        )
+        data_json = tmp_path / "data.json"
+        data_json.write_text('{"f-0": "John"}')
+
+        result = runner.invoke(
+            main,
+            [
+                "verify-data",
+                "--form-json",
+                str(form_json),
+                "--data-json",
+                str(data_json),
+                "--key-mode",
+                "name",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "field names" in result.output
 
     def test_verify_data_json_too_deep(self, tmp_path: Path) -> None:
         """Test verify-data fails when JSON nesting exceeds the depth limit."""

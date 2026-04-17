@@ -106,17 +106,20 @@ class TestPDFFieldValidators:
 
     def test_id_too_long(self) -> None:
         """Test field id exceeding 512 characters is rejected."""
-        with pytest.raises(ValueError, match="field id exceeds maximum length of 512 characters"):
+        match = "field id exceeds maximum length of 512 characters"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="Name", id="x" * 513, type="textfield")
 
     def test_title_too_long(self) -> None:
         """Test title exceeding 4096 characters is rejected."""
-        with pytest.raises(ValueError, match="field exceeds maximum length of 4096 characters"):
+        match = "field exceeds maximum length of 4096 characters"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="Name", id="f-1", type="textfield", title="x" * 4097)
 
     def test_format_too_long(self) -> None:
         """Test format exceeding 4096 characters is rejected."""
-        with pytest.raises(ValueError, match="field exceeds maximum length of 4096 characters"):
+        match = "field exceeds maximum length of 4096 characters"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="Name", id="f-1", type="datefield", format="x" * 4097)
 
 

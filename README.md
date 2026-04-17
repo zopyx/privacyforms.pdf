@@ -51,10 +51,16 @@ pdf-forms verify-json representation.json
 pdf-forms verify-data --form-json representation.json --data-json sample-data.json
 ```
 
-Important:
+Preferred format:
 
-- `verify-data` expects keys in `sample-data.json` to be field IDs such as `f-0`, `f-1`, ...
-- `fill-form` expects keys to be PDF field names, not field IDs
+- use field IDs such as `f-0` for canonical machine-facing data
+- field names such as `Candidate Name` remain supported for convenience
+
+Compatibility modes:
+
+- `fill-form` accepts `--field-keys name|id|auto`
+- `verify-data` accepts `--key-mode name|id|auto`
+- `auto` accepts a mixture of field IDs and field names
 
 ### Fill A PDF Form
 
@@ -62,18 +68,21 @@ Important:
 pdf-forms fill-form form.pdf data.json -o filled.pdf
 pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
 pdf-forms fill-form form.pdf data.json -o filled.pdf --strict
+pdf-forms fill-form form.pdf data.json -o filled.pdf --field-keys id
 ```
 
-`fill-form` consumes a simple JSON object keyed by field names:
+Recommended `fill-form` payloads are keyed by field IDs:
 
 ```json
 {
-  "Candidate Name": "John Smith",
-  "Position": "Software Engineer",
-  "Start date": "2025-06-01",
-  "Full time": true
+  "f-0": "John Smith",
+  "f-1": "Software Engineer",
+  "f-2": "2025-06-01",
+  "f-3": true
 }
 ```
+
+Field names and mixed key styles are still supported through `--field-keys name` and `--field-keys auto`.
 
 ### Check Whether A PDF Contains A Form
 
@@ -86,7 +95,7 @@ pdf-forms info form.pdf
 The package currently exposes two main API layers:
 
 - read/parse APIs via `parse_pdf()` and `extract_pdf_form()`
-- fill/validate APIs via `PDFFormExtractor`
+- higher-level read/fill/validate APIs via `PDFFormExtractor`
 
 ### Parse A PDF Into `PDFRepresentation`
 
@@ -123,15 +132,15 @@ extractor = PDFFormExtractor()
 has_form = extractor.has_form("form.pdf")
 
 form_data = {
-    "Candidate Name": "John Smith",
-    "Full time": True,
+    "f-0": "John Smith",
+    "f-3": True,
 }
 
-errors = extractor.validate_form_data("form.pdf", form_data)
+errors = extractor.validate_form_data("form.pdf", form_data, key_mode="id")
 if errors:
     print(errors)
 else:
-    extractor.fill_form("form.pdf", form_data, "filled.pdf")
+    extractor.fill_form("form.pdf", form_data, "filled.pdf", key_mode="id")
 ```
 
 You can also fill from a JSON file:
@@ -140,7 +149,20 @@ You can also fill from a JSON file:
 from privacyforms_pdf import PDFFormExtractor
 
 extractor = PDFFormExtractor()
-extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf")
+extractor.fill_form_from_json("form.pdf", "data.json", "filled.pdf", key_mode="id")
+```
+
+The class also exposes extractor-style read helpers:
+
+```python
+from privacyforms_pdf import PDFFormExtractor
+
+extractor = PDFFormExtractor()
+representation = extractor.extract("form.pdf")
+fields = extractor.list_fields("form.pdf")
+field = extractor.get_field_by_id("form.pdf", "f-0")
+value = extractor.get_field_value("form.pdf", "Candidate Name")
+extractor.extract_to_json("form.pdf", "representation.json")
 ```
 
 ## Public Objects

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -85,6 +86,61 @@ class TestHasForm:
 
         with patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader):
             assert extractor.has_form(test_file) is False
+
+
+class TestExtractFacade:
+    """Tests for parse/read facade methods."""
+
+    def test_extract_delegates_to_parse_pdf(self, tmp_path: Path) -> None:
+        """Test extract delegates to parse_pdf."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        expected = MagicMock()
+
+        with patch("privacyforms_pdf.extractor.parse_pdf", return_value=expected):
+            result = extractor.extract(test_file)
+            assert result is expected
+
+    def test_extract_to_json_writes_compact_json(self, tmp_path: Path) -> None:
+        """Test extract_to_json writes parsed representation JSON."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "out.json"
+        representation = MagicMock()
+        representation.to_compact_json.return_value = '{"fields": []}'
+
+        with patch.object(extractor, "extract", return_value=representation) as mock_extract:
+            extractor.extract_to_json(test_file, output_file)
+            mock_extract.assert_called_once_with(test_file, source=None)
+            assert output_file.read_text(encoding="utf-8") == '{"fields": []}'
+
+    def test_list_fields_returns_representation_fields(self, tmp_path: Path) -> None:
+        """Test list_fields returns the parsed fields."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        field = MagicMock()
+        representation = MagicMock(fields=[field])
+
+        with patch.object(extractor, "extract", return_value=representation):
+            assert extractor.list_fields(test_file) == [field]
+
+    def test_get_field_helpers_use_representation(self, tmp_path: Path) -> None:
+        """Test get_field_by_id, get_field_by_name, and get_field_value."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        field = MagicMock(value="Jane")
+        representation = MagicMock()
+        representation.get_field_by_id.return_value = field
+        representation.get_field_by_name.return_value = field
+
+        with patch.object(extractor, "extract", return_value=representation):
+            assert extractor.get_field_by_id(test_file, "f-0") is field
+            assert extractor.get_field_by_name(test_file, "Name") is field
+            assert extractor.get_field_value(test_file, "Name") == "Jane"
 
     def test_empty_fields(self, tmp_path: Path) -> None:
         """Test PDF with empty fields dict returns False."""
@@ -269,6 +325,48 @@ class TestValidateFormData:
             assert len(errors) == 1
             assert "Required field not provided: 'Email'" in errors[0]
 
+    def test_validate_form_data_with_id_keys(self, tmp_path: Path) -> None:
+        """Test validation supports field IDs when requested."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        parsed_field = type("ParsedField", (), {"id": "f-0", "name": "Name"})()
+        parsed_representation = MagicMock(fields=[parsed_field])
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch.object(extractor, "extract", return_value=parsed_representation),
+        ):
+            errors = extractor.validate_form_data(test_file, {"f-0": "John"}, key_mode="id")
+            assert errors == []
+
+    def test_validate_form_data_auto_keys_accepts_names_and_ids(self, tmp_path: Path) -> None:
+        """Test auto key mode accepts mixed name and ID keys."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {
+            "Name": {"/FT": "/Tx"},
+            "Agree": {"/FT": "/Btn", "/V": "/Off"},
+        }
+        name_field = type("ParsedField", (), {"id": "f-0", "name": "Name"})()
+        checkbox_field = type("ParsedField", (), {"id": "f-1", "name": "Agree"})()
+        parsed_representation = MagicMock(fields=[name_field, checkbox_field])
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch.object(extractor, "extract", return_value=parsed_representation),
+        ):
+            errors = extractor.validate_form_data(
+                test_file,
+                {"f-0": "John", "Agree": True},
+                key_mode="auto",
+            )
+            assert errors == []
+
 
 class TestFillForm:
     """Tests for fill_form method."""
@@ -371,6 +469,35 @@ class TestFillForm:
                 test_file, {"Name": "John"}, output_file, validate=False
             )
 
+    def test_fill_form_with_id_keys_normalizes_before_fill(self, tmp_path: Path) -> None:
+        """Test fill_form maps field IDs to names before delegating to the filler."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        output_file = tmp_path / "output.pdf"
+
+        mock_reader = MagicMock()
+        mock_reader.get_fields.return_value = {"Name": {"/FT": "/Tx"}}
+        parsed_field = type("ParsedField", (), {"id": "f-0", "name": "Name"})()
+        parsed_representation = MagicMock(fields=[parsed_field])
+
+        with (
+            patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader),
+            patch.object(extractor, "extract", return_value=parsed_representation),
+            patch.object(extractor._filler, "fill", return_value=output_file) as mock_fill,
+        ):
+            result = extractor.fill_form(
+                test_file,
+                {"f-0": "John"},
+                output_file,
+                validate=True,
+                key_mode="id",
+            )
+            assert result == output_file
+            mock_fill.assert_called_once_with(
+                test_file, {"Name": "John"}, output_file, validate=False
+            )
+
 
 class TestFillFormFromJson:
     """Tests for fill_form_from_json method."""
@@ -418,6 +545,31 @@ class TestFillFormFromJson:
 
         with pytest.raises(FileNotFoundError, match="Path is not a file"):
             extractor.fill_form_from_json(test_file, json_dir)
+
+    def test_fill_form_from_json_rejects_nested_json(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json rejects overly nested JSON."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        json_file = tmp_path / "data.json"
+        deep: dict[str, object] = {"key": "value"}
+        for _ in range(55):
+            deep = {"nested": deep}
+        json_file.write_text(json.dumps(deep), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="maximum nesting depth"):
+            extractor.fill_form_from_json(test_file, json_file)
+
+    def test_fill_form_from_json_rejects_non_object(self, tmp_path: Path) -> None:
+        """Test fill_form_from_json rejects non-object JSON payloads."""
+        extractor = PDFFormExtractor()
+        test_file = tmp_path / "test.pdf"
+        test_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('["not", "an", "object"]', encoding="utf-8")
+
+        with pytest.raises(ValueError, match="top-level object"):
+            extractor.fill_form_from_json(test_file, json_file)
 
 
 class TestBackwardsCompatibility:

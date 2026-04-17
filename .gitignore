@@ -63,3 +63,19 @@ Thumbs.db
 
 # Project specific
 intent.md
+
+# Generated root-level artifacts
+/FilledForm.pdf
+/data.json
+/export.json
+/filled.json
+/filled.pdf
+/o.jsoin
+/o.json
+/o.pdf
+/out.json
+/out.pdf
+/out_export.json
+/out_test_no.pdf
+/test_data.json
+/test_data_no.json

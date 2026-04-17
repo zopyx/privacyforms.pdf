@@ -177,6 +177,47 @@ class TestFillFormCommand:
             assert result.exit_code != 0
             assert "boolean" in result.stderr.lower() or "boolean" in result.output.lower()
 
+    def test_fill_form_with_field_id_keys(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form command supports field IDs through --field-keys=id."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('{"f-0": "John Smith"}')
+        output_file = tmp_path / "output.pdf"
+
+        with (
+            patch.object(PDFFormExtractor, "has_form", return_value=True),
+            patch.object(PDFFormExtractor, "validate_form_data", return_value=[]),
+            patch.object(PDFFormExtractor, "fill_form") as mock_fill,
+        ):
+            mock_fill.return_value = output_file
+            result = runner.invoke(
+                main,
+                [
+                    "fill-form",
+                    str(pdf_file),
+                    str(json_file),
+                    "-o",
+                    str(output_file),
+                    "--field-keys",
+                    "id",
+                ],
+            )
+            assert result.exit_code == 0
+            mock_fill.assert_called_once()
+            assert mock_fill.call_args.kwargs["key_mode"] == "id"
+
+    def test_fill_form_non_object_json(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test fill-form rejects non-object JSON payloads."""
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.touch()
+        json_file = tmp_path / "data.json"
+        json_file.write_text('["not", "an", "object"]')
+
+        result = runner.invoke(main, ["fill-form", str(pdf_file), str(json_file)])
+        assert result.exit_code != 0
+        assert "top-level object" in result.output.lower()
+
     def test_fill_form_no_validate_no_form(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test fill-form handles PDFFormNotFoundError when validation is skipped."""
         pdf_file = tmp_path / "test.pdf"

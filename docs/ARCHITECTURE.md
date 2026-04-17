@@ -90,8 +90,14 @@ Contains `FormFiller`, the low-level writer used for:
 
 ### `extractor.py`
 
-Contains `PDFFormExtractor`, the higher-level facade currently focused on:
+Contains `PDFFormExtractor`, the higher-level facade for read, validation, and fill workflows:
 
+- `extract()`
+- `extract_to_json()`
+- `list_fields()`
+- `get_field_by_id()`
+- `get_field_by_name()`
+- `get_field_value()`
 - `has_form()`
 - `validate_form_data()`
 - `fill_form()`
@@ -113,21 +119,36 @@ The CLI is implemented with Click and loaded through `pluggy` entry points. Buil
 
 ### Parse API
 
-The current parse API is function-based:
+The package exposes both function-based and facade-based read APIs.
+
+Function-based:
 
 - `extract_pdf_form(pdf_filename: Path | str) -> PDFRepresentation`
 - `parse_pdf(pdf_path: Path | str, source: str | None = None, reader: PdfReader | None = None) -> PDFRepresentation`
 
-These functions return a validated `PDFRepresentation`.
+Facade-based:
+
+- `PDFFormExtractor.extract(pdf_path, source=None)`
+- `PDFFormExtractor.extract_to_json(pdf_path, output_path, source=None)`
+- `PDFFormExtractor.list_fields(pdf_path)`
+- `PDFFormExtractor.get_field_by_id(pdf_path, field_id)`
+- `PDFFormExtractor.get_field_by_name(pdf_path, field_name)`
+- `PDFFormExtractor.get_field_value(pdf_path, field_name)`
 
 ### Fill API
 
 The current fill/validation API is class-based:
 
 - `PDFFormExtractor.has_form(pdf_path)`
-- `PDFFormExtractor.validate_form_data(pdf_path, form_data, strict=False, allow_extra_fields=False)`
-- `PDFFormExtractor.fill_form(pdf_path, form_data, output_path=None, validate=True)`
-- `PDFFormExtractor.fill_form_from_json(pdf_path, json_path, output_path=None, validate=True)`
+- `PDFFormExtractor.validate_form_data(pdf_path, form_data, strict=False, allow_extra_fields=False, key_mode="name" | "id" | "auto")`
+- `PDFFormExtractor.fill_form(pdf_path, form_data, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
+- `PDFFormExtractor.fill_form_from_json(pdf_path, json_path, output_path=None, validate=True, key_mode="name" | "id" | "auto")`
+
+Preferred contract:
+
+- field IDs are the canonical external key format
+- field names are supported as convenience inputs
+- `auto` mode exists for compatibility and mixed payloads
 
 ### Low-Level Writer
 
@@ -226,16 +247,20 @@ The CLI is intentionally thin.
 ### `verify-data`
 
 - validates a parsed representation JSON file
-- checks that sample data keys match parsed field IDs
+- checks that sample data keys match parsed field IDs, field names, or both
 
 Important:
 
-- `verify-data` is ID-based
-- `fill-form` is name-based
+- `verify-data` supports `--key-mode id|name|auto`
+- `fill-form` supports `--field-keys id|name|auto`
+- `auto` mode accepts a mixture of field names and canonical field IDs
+- `id` is the preferred machine-facing mode
 
 ### `fill-form`
 
 - reads simple JSON key/value data
+- supports field names, field IDs, or mixed keys
+- prefers field IDs as the canonical payload format
 - optionally validates field names and checkbox value types
 - fills the target PDF
 
@@ -277,4 +302,4 @@ The fill path benefits from a small facade that can:
 
 ### Compatibility Layer
 
-`extractor.py` still exports a few helper functions and delegated wrappers for compatibility and tests. The canonical read model, however, is `PDFRepresentation`, not the older `PDFFormData` structure.
+`extractor.py` still exports a few helper functions and delegated wrappers for compatibility and tests. The canonical read model is `PDFRepresentation`, and the extractor facade now delegates to that model rather than maintaining a separate read structure.

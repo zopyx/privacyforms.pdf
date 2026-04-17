@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pypdf import PdfReader, PdfWriter
 
@@ -16,6 +17,7 @@ from privacyforms_pdf.models import (
     PDFFormError,
     PDFFormNotFoundError,
 )
+from privacyforms_pdf.parser import parse_pdf
 from privacyforms_pdf.utils import (
     _install_pypdf_warning_filter,
     _PypdfWarningFilter,
@@ -24,7 +26,13 @@ from privacyforms_pdf.utils import (
     has_geometry_support,
 )
 
+if TYPE_CHECKING:
+    from privacyforms_pdf.schema import PDFField, PDFRepresentation
+
 logger = logging.getLogger(__name__)
+
+_MAX_JSON_SIZE = 10 * 1024 * 1024  # 10 MB
+_MAX_JSON_DEPTH = 50
 
 # Re-export all public names for backwards compatibility
 __all__ = [
@@ -78,6 +86,141 @@ class PDFFormExtractor:
         fields = reader.get_fields()
         return fields is not None and len(fields) > 0
 
+    def extract(
+        self,
+        pdf_path: str | Path,
+        *,
+        source: str | None = None,
+    ) -> PDFRepresentation:
+        """Parse a PDF into the canonical PDFRepresentation."""
+        pdf_path = Path(pdf_path)
+        self._validate_pdf_path(pdf_path)
+        return parse_pdf(pdf_path, source=source)
+
+    def extract_to_json(
+        self,
+        pdf_path: str | Path,
+        output_path: str | Path,
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Write the canonical parsed representation to a JSON file."""
+        representation = self.extract(pdf_path, source=source)
+        Path(output_path).write_text(representation.to_compact_json(indent=2), encoding="utf-8")
+
+    def list_fields(self, pdf_path: str | Path) -> list[PDFField]:
+        """Return parsed fields for the given PDF."""
+        representation = self.extract(pdf_path)
+        return list(representation.fields)
+
+    def get_field_by_id(self, pdf_path: str | Path, field_id: str) -> PDFField | None:
+        """Return a parsed field by canonical field ID."""
+        representation = self.extract(pdf_path)
+        return representation.get_field_by_id(field_id)
+
+    def get_field_by_name(self, pdf_path: str | Path, field_name: str) -> PDFField | None:
+        """Return a parsed field by PDF field name."""
+        representation = self.extract(pdf_path)
+        return representation.get_field_by_name(field_name)
+
+    def get_field_value(
+        self, pdf_path: str | Path, field_name: str
+    ) -> str | bool | list[str] | None:
+        """Return the current value of a parsed field by name."""
+        field = self.get_field_by_name(pdf_path, field_name)
+        return None if field is None else field.value
+
+    @staticmethod
+    def _check_json_size(path: Path, max_size: int = _MAX_JSON_SIZE) -> None:
+        """Raise ValueError if *path* exceeds the maximum allowed size."""
+        size = path.stat().st_size
+        if size > max_size:
+            raise ValueError(
+                f"JSON file too large: {path.name} ({size} bytes). "
+                f"Maximum allowed is {max_size} bytes."
+            )
+
+    @classmethod
+    def _check_json_depth(
+        cls, obj: object, depth: int = 0, max_depth: int = _MAX_JSON_DEPTH
+    ) -> None:
+        """Raise ValueError if *obj* exceeds the configured nesting depth."""
+        if depth > max_depth:
+            raise ValueError(f"JSON structure exceeds maximum nesting depth of {max_depth}")
+        if isinstance(obj, dict):
+            for value in obj.values():
+                cls._check_json_depth(value, depth + 1, max_depth)
+        elif isinstance(obj, list):
+            for item in obj:
+                cls._check_json_depth(item, depth + 1, max_depth)
+
+    @classmethod
+    def _safe_json_loads(cls, text: str) -> object:
+        """Parse JSON with size and depth protections."""
+        try:
+            result = json.loads(text)
+        except RecursionError as exc:
+            raise ValueError(
+                f"JSON structure is too deeply nested (maximum depth {_MAX_JSON_DEPTH})"
+            ) from exc
+        cls._check_json_depth(result)
+        return result
+
+    @staticmethod
+    def _require_json_object(data: object) -> dict[str, Any]:
+        """Require a top-level JSON object for fill data."""
+        if not isinstance(data, Mapping):
+            raise ValueError(
+                "Form data JSON must be a top-level object with field names or field IDs as keys"
+            )
+        return {str(key): value for key, value in data.items()}
+
+    @classmethod
+    def load_form_data_json(cls, json_path: str | Path) -> dict[str, Any]:
+        """Load a form-data JSON file with basic size and depth hardening."""
+        path = Path(json_path)
+        if not path.exists():
+            raise FileNotFoundError(f"JSON file not found: {path}")
+        if not path.is_file():
+            raise FileNotFoundError(f"Path is not a file: {path}")
+
+        cls._check_json_size(path)
+        text = path.read_text(encoding="utf-8")
+        return cls._require_json_object(cls._safe_json_loads(text))
+
+    def _normalize_form_data_keys(
+        self,
+        pdf_path: Path,
+        form_data: Mapping[str, Any],
+        *,
+        key_mode: Literal["name", "id", "auto"],
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Normalize input data keys to PDF field names."""
+        normalized: dict[str, Any] = {}
+        errors: list[str] = []
+
+        if key_mode == "name":
+            return {str(key): value for key, value in form_data.items()}, errors
+
+        representation = self.extract(pdf_path)
+        id_to_name = {field.id: field.name for field in representation.fields}
+        known_names = {field.name for field in representation.fields}
+
+        for raw_key, value in form_data.items():
+            key = str(raw_key)
+            if key_mode == "id":
+                resolved_key = id_to_name.get(key, key)
+            else:
+                resolved_key = key if key in known_names else id_to_name.get(key, key)
+
+            if resolved_key in normalized and key != resolved_key:
+                errors.append(f"Multiple input keys map to the same form field: '{resolved_key}'")
+                continue
+
+            normalized[resolved_key] = value
+
+        return normalized, errors
+
     @staticmethod
     def _get_field_type(field: dict[str, Any]) -> str:
         """Determine field type from pypdf field data."""
@@ -120,12 +263,19 @@ class PDFFormExtractor:
         *,
         strict: bool = False,
         allow_extra_fields: bool = False,
+        key_mode: Literal["name", "id", "auto"] = "name",
     ) -> list[str]:
         """Validate form data against PDF form fields."""
         pdf_path = Path(pdf_path)
         self._validate_pdf_path(pdf_path)
 
         errors: list[str] = []
+        normalized_form_data, normalization_errors = self._normalize_form_data_keys(
+            pdf_path,
+            form_data,
+            key_mode=key_mode,
+        )
+        errors.extend(normalization_errors)
 
         try:
             reader = PdfReader(str(pdf_path))
@@ -139,7 +289,7 @@ class PDFFormExtractor:
         if not fields_by_name:
             return ["PDF does not contain a form"]
 
-        for field_name, value in form_data.items():
+        for field_name, value in normalized_form_data.items():
             if not allow_extra_fields and field_name not in fields_by_name:
                 errors.append(f"Field not found in form: '{field_name}'")
                 continue
@@ -154,7 +304,7 @@ class PDFFormExtractor:
                 )
 
         if strict:
-            provided_names = set(form_data.keys())
+            provided_names = set(normalized_form_data.keys())
             for field_name in fields_by_name:
                 if field_name not in provided_names:
                     errors.append(f"Required field not provided: '{field_name}'")
@@ -168,6 +318,7 @@ class PDFFormExtractor:
         output_path: str | Path | None = None,
         *,
         validate: bool = True,
+        key_mode: Literal["name", "id", "auto"] = "name",
     ) -> Path:
         """Fill a PDF form with data."""
         pdf_path = Path(pdf_path)
@@ -176,12 +327,20 @@ class PDFFormExtractor:
         if not self.has_form(pdf_path):
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
 
+        normalized_form_data, normalization_errors = self._normalize_form_data_keys(
+            pdf_path,
+            form_data,
+            key_mode=key_mode,
+        )
+        if normalization_errors:
+            raise FormValidationError("Form data key normalization failed", normalization_errors)
+
         if validate:
-            errors = self.validate_form_data(pdf_path, form_data)
+            errors = self.validate_form_data(pdf_path, form_data, key_mode=key_mode)
             if errors:
                 raise FormValidationError("Form data validation failed", errors)
 
-        return self._filler.fill(pdf_path, form_data, output_path, validate=False)
+        return self._filler.fill(pdf_path, normalized_form_data, output_path, validate=False)
 
     def fill_form_from_json(
         self,
@@ -190,21 +349,20 @@ class PDFFormExtractor:
         output_path: str | Path | None = None,
         *,
         validate: bool = True,
+        key_mode: Literal["name", "id", "auto"] = "name",
     ) -> Path:
         """Fill a PDF form with data from a JSON file."""
         pdf_path = Path(pdf_path)
-        json_path = Path(json_path)
-
         self._validate_pdf_path(pdf_path)
-        if not json_path.exists():
-            raise FileNotFoundError(f"JSON file not found: {json_path}")
-        if not json_path.is_file():
-            raise FileNotFoundError(f"Path is not a file: {json_path}")
+        data = self.load_form_data_json(json_path)
 
-        with open(json_path, encoding="utf-8") as f:
-            data: dict[str, Any] = json.load(f)
-
-        return self.fill_form(pdf_path, data, output_path, validate=validate)
+        return self.fill_form(
+            pdf_path,
+            data,
+            output_path,
+            validate=validate,
+            key_mode=key_mode,
+        )
 
     def _validate_pdf_path(self, pdf_path: Path) -> None:
         """Validate that the PDF path exists and is a file."""

@@ -21,12 +21,14 @@ class TestPDFFieldScalarValidation:
 
     def test_radiobuttongroup_value_rejects_non_str(self) -> None:
         """Radiobuttongroup value must be str or None (line 384)."""
-        with pytest.raises(ValueError, match="radiobuttongroup value must be str or None"):
+        match = "radiobuttongroup value must be str or None"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="Status", id="f-2", type="radiobuttongroup", value=True)
 
     def test_combobox_value_rejects_non_str(self) -> None:
         """Combobox value must be str or None (line 384)."""
-        with pytest.raises(ValueError, match="combobox value must be str or None"):
+        match = "combobox value must be str or None"
+        with pytest.raises(ValueError, match=match):
             PDFField(name="Country", id="f-3", type="combobox", value=True)
 
     def test_listbox_list_value_without_multi_select_fails(self) -> None:
@@ -39,7 +41,7 @@ class TestPDFFieldScalarValidation:
         """List values are only valid for listbox (line 392)."""
         field = PDFField.model_construct(name="Name", id="f-5", type="customtype", value=["a", "b"])
         with pytest.raises(ValueError, match="list values are only valid for listbox value"):
-            field.validate_field_semantics()  # type: ignore[call-non-callable]
+            field._validate_scalar_value(["a", "b"], label="value")
 
 
 class TestPDFRepresentationValidators:
@@ -58,7 +60,8 @@ class TestPDFRepresentationValidators:
 
     def test_source_too_long_fails(self) -> None:
         """Source must not exceed 4096 characters (line 433)."""
-        with pytest.raises(ValueError, match="source exceeds maximum length of 4096 characters"):
+        match = "source exceeds maximum length of 4096 characters"
+        with pytest.raises(ValueError, match=match):
             PDFRepresentation(source="x" * 5000)
 
     def test_rows_invalid_field_reference_type(self) -> None:

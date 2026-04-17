@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-**privacyforms-pdf** is a Python library for extracting and filling PDF form data using [pypdf](https://pypdf.readthedocs.io/).
+**privacyforms-pdf** is a Python library for parsing and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).
 
 - **Author**: Andreas Jung <info@zopyx.com>
-- **Python Version**: 3.14+
+- **Python Version**: 3.12+
 - **Package Manager**: [uv](https://github.com/astral-sh/uv)
-- **License**: (Add your license)
+- **License**: MIT
 
 ## Architecture
 
@@ -31,10 +31,14 @@ privacyforms_pdf/
 
 ### Core Classes
 
-- **PDFFormExtractor**: Main class for filling PDF forms
+- **PDFFormExtractor**: Main high-level class for validation and filling
   - Uses pypdf for all PDF operations
   - Handles all PDF form field types (textfield, datefield, checkbox, radiobuttongroup, etc.)
-  - Provides methods: `has_form()`, `fill_form()`, `fill_form_from_json()`, `validate_form_data()`
+  - Provides methods: `extract()`, `extract_to_json()`, `list_fields()`, `get_field_by_id()`, `get_field_by_name()`, `get_field_value()`, `has_form()`, `fill_form()`, `fill_form_from_json()`, `validate_form_data()`
+- **Parse API**: Function-based read surface
+  - `parse_pdf()`
+  - `extract_pdf_form()`
+  - Returns `PDFRepresentation`
 - **Pluggy Plugin System**: CLI commands are loaded dynamically via `pluggy`
   - Hook specification: `PDFFormsCommandsSpec.register_commands()`
   - Built-in commands are registered as `privacyforms_pdf.commands` entry points
@@ -88,8 +92,8 @@ make test           # Run tests
 
 ### Quality Standards
 
-- **Typing**: All code must have complete type hints (Pyright strict mode)
-- **Linting**: Ruff with line length 100, Python 3.14 target
+- **Typing**: All code must have complete type hints (`ty` is the configured checker)
+- **Linting**: Ruff with line length 100, Python 3.13 target
 - **Testing**: Minimum 90% coverage required (currently 99%)
 - **Docstrings**: Google-style docstrings for all public APIs
 
@@ -165,7 +169,7 @@ Tests use `unittest.mock.patch` to mock:
 
 1. **Lint & Format**: Ruff checks
 2. **Type Check**: ty strict mode
-3. **Test**: Multi-platform (Ubuntu, macOS) with Python 3.13, 3.13t, 3.14, 3.14t
+3. **Test**: Python matrix includes 3.12, 3.13, 3.14, and 3.14t
 
 ### Release Process
 
@@ -212,18 +216,20 @@ from .extractor import PDFFormExtractor
 ### Function Signatures
 
 ```python
-def extract(self, pdf_path: str | Path) -> PDFFormData:
-    """Extract form data from a PDF file.
+def parse_pdf(
+    pdf_path: str | Path,
+    source: str | None = None,
+    reader: PdfReader | None = None,
+) -> PDFRepresentation:
+    """Parse a PDF into the canonical representation.
 
     Args:
         pdf_path: Path to the PDF file.
+        source: Optional source identifier.
+        reader: Optional preconstructed PdfReader.
 
     Returns:
-        PDFFormData containing all form information.
-
-    Raises:
-        FileNotFoundError: If the PDF file does not exist.
-        PDFFormNotFoundError: If the PDF does not contain a form.
+        PDFRepresentation containing normalized field and row data.
     """
 ```
 

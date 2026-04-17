@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal, cast
 
 import click
 
@@ -31,6 +32,13 @@ from .utils import create_extractor
     default=False,
     help="Require all form fields to be provided (default: not strict)",
 )
+@click.option(
+    "--field-keys",
+    type=click.Choice(["name", "id", "auto"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Interpret JSON keys as field names, field IDs, or auto-detect either. Prefer IDs.",
+)
 @click.pass_context
 def fill_form_command(
     ctx: click.Context,  # noqa: ARG001
@@ -39,16 +47,17 @@ def fill_form_command(
     output: Path | None,
     validate: bool,
     strict: bool,
+    field_keys: str,
 ) -> None:
     """Fill a PDF form with data from a JSON file.
 
     PDF_PATH is the path to the PDF form file.
     JSON_PATH is the path to the JSON file with form data.
 
-    The JSON file must contain simple key:value pairs where keys are field names
-    and values are the values to fill:
+    The JSON file must contain simple key:value pairs. Field IDs are the
+    preferred key format. Field names and mixed keys remain supported.
 
-        {"Candidate Name": "John Smith", "Full time": true}
+        {"f-0": "John Smith", "f-3": true}
 
     Examples:
         pdf-forms fill-form form.pdf data.json -o filled.pdf
@@ -56,16 +65,19 @@ def fill_form_command(
         pdf-forms fill-form form.pdf data.json -o filled.pdf --no-validate
     """
     extractor = create_extractor()
+    key_mode = cast("Literal['name', 'id', 'auto']", field_keys)
 
     try:
-        # Read and parse JSON
-        with open(json_path, encoding="utf-8") as f:
-            form_data = json.load(f)
+        form_data = extractor.load_form_data_json(json_path)
 
         # Validate if requested
         if validate:
             errors = extractor.validate_form_data(
-                pdf_path, form_data, strict=strict, allow_extra_fields=False
+                pdf_path,
+                form_data,
+                strict=strict,
+                allow_extra_fields=False,
+                key_mode=key_mode,
             )
             if errors:
                 click.echo("Validation errors:", err=True)
@@ -75,7 +87,13 @@ def fill_form_command(
 
             click.echo("✓ Form data validation passed")
 
-        extractor.fill_form(pdf_path, form_data, output, validate=False)
+        extractor.fill_form(
+            pdf_path,
+            form_data,
+            output,
+            validate=False,
+            key_mode=key_mode,
+        )
 
         if output:
             click.echo(f"✓ Form filled and saved to: {output}")
@@ -91,6 +109,8 @@ def fill_form_command(
         raise click.ClickException(error_msg) from e
     except json.JSONDecodeError as e:
         raise click.ClickException(f"Invalid JSON file: {e}") from e
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
 
 
 @hookimpl
