@@ -56,6 +56,7 @@ __all__ = [
     "PDFCPUExecutionError",
     "PDFCPUNotFoundError",
     "cluster_y_positions",
+    "extract_pdf_forms",
     "get_available_geometry_backends",
     "has_geometry_support",
     "is_pdfcpu_available",
@@ -654,3 +655,23 @@ class PDFFormExtractor:
             user_password=user_password,
             owner_password=owner_password,
         )
+
+
+def extract_pdf_forms(pdf_filename: str | Path) -> "PDFRepresentation":
+    """Extract PDF form data into the PDFRepresentation schema.
+
+    This is a public facade that parses a fillable PDF and returns a
+    Pydantic-validated PDFRepresentation object.
+
+    Args:
+        pdf_filename: Path to the PDF file to parse.
+
+    Returns:
+        PDFRepresentation containing all extracted fields, layout, and rows.
+    """
+    from pathlib import Path
+
+    from specs.pdf_parser import parse_pdf
+    from specs.pdf_schema import PDFRepresentation
+
+    return parse_pdf(Path(pdf_filename))

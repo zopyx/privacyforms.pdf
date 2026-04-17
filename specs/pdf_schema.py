@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
 PDFFieldType = Literal[
     "textfield",
@@ -19,7 +19,7 @@ PDFFieldType = Literal[
 class FieldFlags(BaseModel):
     """Human-readable PDF field flags parsed from /Ff integer."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     read_only: bool = Field(
         default=False,
@@ -97,26 +97,42 @@ class FieldFlags(BaseModel):
         description="Commit choice value immediately on selection change (bit 27).",
     )
 
+    @model_serializer(mode="wrap")
+    def compact_serialize(self, handler):
+        """Serialize only True flags to keep JSON compact."""
+        data = handler(self)
+        return {k: v for k, v in data.items() if v is not False}
+
 
 class RowGroup(BaseModel):
     """Representation of list of PDF fields in one row."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
-    fields: list[PDFField] = Field(
+    fields: list[PDFField | str] = Field(
         default_factory=list,
-        description="Ordered list of PDF fields appearing in this row.",
+        description="Ordered list of PDF fields appearing in this row (may be IDs during deserialization).",
     )
     page_index: int = Field(
-        default=0,
-        description="Zero-based index of the page where this row appears.",
+        default=1,
+        description="One-based index of the page where this row appears.",
     )
+
+    @model_serializer(mode="wrap")
+    def serialize_compact(self, handler):
+        """Serialize fields as IDs for a compact representation."""
+        data = handler(self)
+        data["page_index"] = self.page_index
+        data["fields"] = [
+            field.id if isinstance(field, PDFField) else field for field in self.fields
+        ]
+        return data
 
 
 class ChoiceOption(BaseModel):
     """Structured option for choice-based fields."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     value: str = Field(
         ...,
@@ -153,11 +169,11 @@ class ChoiceOption(BaseModel):
 class FieldLayout(BaseModel):
     """Compact layout hints for conversion and visual grouping."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     page: int | None = Field(
         default=None,
-        description="Zero-based page index where the field appears.",
+        description="One-based page index where the field appears.",
     )
     x: int | None = Field(
         default=None,
@@ -188,7 +204,7 @@ class FieldLayout(BaseModel):
 class PDFField(BaseModel):
     """Representation of a single PDF form field."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     name: str = Field(
         ...,
@@ -319,7 +335,7 @@ class PDFField(BaseModel):
 class PDFRepresentation(BaseModel):
     """Top-level document model for the PDF-to-SurveyJS intermediate format."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
     spec_version: str = Field(
         default="1.0",
@@ -358,14 +374,32 @@ class PDFRepresentation(BaseModel):
 
     @model_validator(mode="after")
     def validate_document(self) -> PDFRepresentation:
-        """Enforce document-level constraints."""
+        """Enforce document-level constraints and resolve row field IDs."""
         field_ids = [field.id for field in self.fields]
         duplicates = sorted({field_id for field_id in field_ids if field_ids.count(field_id) > 1})
         if duplicates:
             raise ValueError(f"field ids must be unique: {', '.join(duplicates)}")
 
         valid_ids = {field.id for field in self.fields}
-        row_ids = {field.id for row in self.rows for field in row.fields}
+        field_map = {field.id: field for field in self.fields}
+
+        # Resolve row field IDs to PDFField objects
+        for row in self.rows:
+            resolved: list[PDFField | str] = []
+            for item in row.fields:
+                if isinstance(item, PDFField):
+                    resolved.append(item)
+                elif isinstance(item, str):
+                    if item not in field_map:
+                        raise ValueError(
+                            f"rows reference fields that are not present in fields: {item}"
+                        )
+                    resolved.append(field_map[item])
+                else:
+                    raise ValueError(f"rows contain invalid field reference: {item}")
+            row.fields = resolved  # type: ignore[assignment]
+
+        row_ids = {field.id for row in self.rows for field in row.fields if isinstance(field, PDFField)}
         unknown_row_ids = sorted(row_ids - valid_ids)
         if unknown_row_ids:
             missing_ids = ", ".join(unknown_row_ids)
@@ -388,3 +422,7 @@ class PDFRepresentation(BaseModel):
             if field.name == name:
                 return field
         return None
+
+    def to_compact_json(self, *, indent: int = 2) -> str:
+        """Serialize to a compact JSON string, omitting None values and defaults."""
+        return self.model_dump_json(exclude_none=True, exclude_defaults=True, indent=indent)

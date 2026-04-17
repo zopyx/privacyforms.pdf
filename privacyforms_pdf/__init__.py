@@ -19,6 +19,7 @@ from .extractor import (
     PDFFormExtractor,
     PDFFormNotFoundError,
     cluster_y_positions,
+    extract_pdf_forms,
     get_available_geometry_backends,
     has_geometry_support,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "has_geometry_support",
     "is_pdfcpu_available",
     "cluster_y_positions",
+    "extract_pdf_forms",
     # Internal helpers (re-exported for tests)
     "_install_pypdf_warning_filter",
     "_PypdfWarningFilter",
