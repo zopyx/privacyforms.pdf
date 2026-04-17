@@ -15,6 +15,9 @@ dependencies = [
 
 [project.scripts]
 pdf-forms = "privacyforms_pdf.cli:main"
+pdf-parse-form = "specs.pdf_parser:main"
+pdf-validate-form-data = "specs.validate_json_form_data:main"
+pdf-verify-form-json = "specs.verify_form_json:main"
 
 [build-system]
 requires = ["setuptools>=64", "wheel"]
@@ -22,6 +25,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9.4",
     "nox>=2026.2.9",
     "pytest>=9",
     "pytest-cov>=7",
@@ -72,5 +76,5 @@ skip_covered = false
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["privacyforms_pdf*"]
+include = ["privacyforms_pdf*", "specs*"]
 exclude = ["demo*", "samples*", "tests*"]
