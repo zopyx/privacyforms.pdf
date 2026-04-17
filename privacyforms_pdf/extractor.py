@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -18,6 +17,7 @@ from privacyforms_pdf.models import (
     PDFFormNotFoundError,
 )
 from privacyforms_pdf.parser import parse_pdf
+from privacyforms_pdf.security_io import safe_write_text, validate_pdf_path
 from privacyforms_pdf.utils import (
     _install_pypdf_warning_filter,
     _PypdfWarningFilter,
@@ -76,7 +76,7 @@ class PDFFormService:
     def has_form(self, pdf_path: str | Path) -> bool:
         """Check if a PDF contains a form."""
         pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
+        validate_pdf_path(pdf_path)
 
         reader = PdfReader(str(pdf_path))
         fields = reader.get_fields()
@@ -90,7 +90,7 @@ class PDFFormService:
     ) -> PDFRepresentation:
         """Parse a PDF into the canonical PDFRepresentation."""
         pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
+        validate_pdf_path(pdf_path)
         return parse_pdf(pdf_path, source=source)
 
     def extract_to_json(
@@ -102,10 +102,7 @@ class PDFFormService:
     ) -> None:
         """Write the canonical parsed representation to a JSON file."""
         representation = self.extract(pdf_path, source=source)
-        out = Path(output_path)
-        if out.is_symlink():
-            raise ValueError(f"Refusing to write to symlink: {out}")
-        out.write_text(representation.to_compact_json(indent=2), encoding="utf-8")
+        safe_write_text(Path(output_path), representation.to_compact_json(indent=2))
 
     def list_fields(self, pdf_path: str | Path) -> list[PDFField]:
         """Return parsed fields for the given PDF."""
@@ -225,7 +222,7 @@ class PDFFormService:
     ) -> list[str]:
         """Validate form data against PDF form fields."""
         pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
+        validate_pdf_path(pdf_path)
 
         errors: list[str] = []
         normalized_form_data, normalization_errors = self._normalize_form_data_keys(
@@ -280,7 +277,7 @@ class PDFFormService:
     ) -> Path:
         """Fill a PDF form with data."""
         pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
+        validate_pdf_path(pdf_path)
 
         if not self.has_form(pdf_path):
             raise PDFFormNotFoundError(f"PDF does not contain a form: {pdf_path}")
@@ -311,7 +308,7 @@ class PDFFormService:
     ) -> Path:
         """Fill a PDF form with data from a JSON file."""
         pdf_path = Path(pdf_path)
-        self._validate_pdf_path(pdf_path)
+        validate_pdf_path(pdf_path)
         data = self.load_form_data_json(json_path)
 
         return self.fill_form(
@@ -321,21 +318,6 @@ class PDFFormService:
             validate=validate,
             key_mode=key_mode,
         )
-
-    def _validate_pdf_path(self, pdf_path: Path) -> None:
-        """Validate that the PDF path exists, is a regular file, and looks like a PDF."""
-        if pdf_path.is_symlink():
-            raise ValueError(f"Symlinks are not allowed: {pdf_path}")
-        if not pdf_path.exists():
-            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
-        if not pdf_path.is_file():
-            raise FileNotFoundError(f"Path is not a file: {pdf_path}")
-        if not stat.S_ISREG(pdf_path.stat().st_mode):
-            raise ValueError(f"Path is not a regular file: {pdf_path}")
-        with pdf_path.open("rb") as f:
-            header = f.read(4)
-            if header != b"%PDF":
-                raise ValueError(f"File does not appear to be a valid PDF: {pdf_path}")
 
     def _fill_form_fields_without_appearance(
         self,

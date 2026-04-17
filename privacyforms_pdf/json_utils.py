@@ -20,16 +20,23 @@ def check_json_size(path: Path, max_size: int = MAX_JSON_SIZE) -> None:
         )
 
 
-def check_json_depth(obj: object, depth: int = 0, max_depth: int = MAX_JSON_DEPTH) -> None:
-    """Raise ValueError if *obj* exceeds *max_depth* levels of nesting."""
-    if depth > max_depth:
-        raise ValueError(f"JSON structure exceeds maximum nesting depth of {max_depth}")
-    if isinstance(obj, dict):
-        for value in obj.values():
-            check_json_depth(value, depth + 1, max_depth)
-    elif isinstance(obj, list):
-        for item in obj:
-            check_json_depth(item, depth + 1, max_depth)
+def check_json_depth(obj: object, *, max_depth: int = MAX_JSON_DEPTH) -> None:
+    """Raise ValueError if *obj* exceeds *max_depth* levels of nesting.
+
+    Uses an iterative stack to avoid recursion limits.
+    """
+    # Stack of (object, current_depth)
+    stack: list[tuple[object, int]] = [(obj, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > max_depth:
+            raise ValueError(f"JSON structure exceeds maximum nesting depth of {max_depth}")
+        if isinstance(current, dict):
+            for value in current.values():
+                stack.append((value, depth + 1))
+        elif isinstance(current, list):
+            for item in current:
+                stack.append((item, depth + 1))
 
 
 def safe_json_loads(text: str) -> object:

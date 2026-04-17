@@ -946,6 +946,38 @@ class TestResolveKidLayoutExtra2:
         assert rect == [0.0, 0.0, 10.0, 10.0]
 
 
+class TestParsePdfMaxFields:
+    """Tests for MAX_FIELDS limit in parse_pdf."""
+
+    def test_too_many_fields_raises(self, tmp_path: Path) -> None:
+        """It raises ValueError when PDF has more than 10,000 fields."""
+        from privacyforms_pdf.parser import _MAX_FIELDS
+
+        fields = {f"field_{i}": DictionaryObject({}) for i in range(_MAX_FIELDS + 1)}
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
+            mock_reader.return_value.get_fields.return_value = fields
+            mock_reader.return_value.pages = []
+            with pytest.raises(ValueError, match="too many fields"):
+                parse_pdf(tmp_path / "form.pdf")
+
+    def test_at_limit_succeeds(self, tmp_path: Path) -> None:
+        """It succeeds when PDF has exactly 10,000 fields."""
+        from privacyforms_pdf.parser import _MAX_FIELDS
+
+        fields = {
+            f"field_{i}": DictionaryObject({
+                NameObject("/T"): TextStringObject(f"field_{i}"),
+                NameObject("/FT"): NameObject("/Tx"),
+            })
+            for i in range(_MAX_FIELDS)
+        }
+        with patch("privacyforms_pdf.parser.PdfReader") as mock_reader:
+            mock_reader.return_value.get_fields.return_value = fields
+            mock_reader.return_value.pages = []
+            result = parse_pdf(tmp_path / "form.pdf")
+            assert len(result.fields) == _MAX_FIELDS
+
+
 class TestParsePdfEdgeCasesExtra2:
     """More edge-case tests for parse_pdf."""
 

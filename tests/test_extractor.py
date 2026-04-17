@@ -16,6 +16,7 @@ from privacyforms_pdf.extractor import (
     get_available_geometry_backends,
     has_geometry_support,
 )
+from privacyforms_pdf.security_io import validate_pdf_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,44 +39,39 @@ class TestPDFFormServiceInitialization:
 
 
 class TestValidatePDFPath:
-    """Tests for _validate_pdf_path method."""
+    """Tests for validate_pdf_path function."""
 
     def test_valid_pdf_path(self, tmp_path: Path) -> None:
         """Test valid PDF path."""
-        service = PDFFormService()
         test_file = tmp_path / "test.pdf"
         test_file.write_bytes(b"%PDF-1.4\n")
-        service._validate_pdf_path(test_file)
+        validate_pdf_path(test_file)
 
     def test_nonexistent_file(self, tmp_path: Path) -> None:
         """Test nonexistent file raises FileNotFoundError."""
-        service = PDFFormService()
         with pytest.raises(FileNotFoundError):
-            service._validate_pdf_path(tmp_path / "nonexistent.pdf")
+            validate_pdf_path(tmp_path / "nonexistent.pdf")
 
     def test_directory_path(self, tmp_path: Path) -> None:
         """Test directory path raises FileNotFoundError."""
-        service = PDFFormService()
         with pytest.raises(FileNotFoundError):
-            service._validate_pdf_path(tmp_path)
+            validate_pdf_path(tmp_path)
 
     def test_symlink_rejected(self, tmp_path: Path) -> None:
         """Test symlink path raises ValueError."""
-        service = PDFFormService()
         real_file = tmp_path / "real.pdf"
         real_file.write_bytes(b"%PDF-1.4\n")
         symlink = tmp_path / "link.pdf"
         symlink.symlink_to(real_file)
         with pytest.raises(ValueError, match="Symlinks are not allowed"):
-            service._validate_pdf_path(symlink)
+            validate_pdf_path(symlink)
 
     def test_invalid_pdf_magic_rejected(self, tmp_path: Path) -> None:
         """Test non-PDF file raises ValueError."""
-        service = PDFFormService()
         text_file = tmp_path / "not_a_pdf.pdf"
         text_file.write_text("This is not a PDF", encoding="utf-8")
         with pytest.raises(ValueError, match="does not appear to be a valid PDF"):
-            service._validate_pdf_path(text_file)
+            validate_pdf_path(text_file)
 
 
 class TestHasForm:
@@ -146,9 +142,11 @@ class TestExtractFacade:
         representation = MagicMock()
         representation.to_compact_json.return_value = '{"fields": []}'
 
-        with patch.object(service, "extract", return_value=representation):
-            with pytest.raises(ValueError, match="Refusing to write to symlink"):
-                service.extract_to_json(test_file, output_symlink)
+        with (
+            patch.object(service, "extract", return_value=representation),
+            pytest.raises(ValueError, match="Refusing to write to symlink"),
+        ):
+            service.extract_to_json(test_file, output_symlink)
 
         assert real_file.read_text(encoding="utf-8") == "secret"
 

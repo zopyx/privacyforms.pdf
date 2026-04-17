@@ -21,7 +21,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill succeeds with mocked pypdf."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -42,7 +42,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill falls back when pypdf raises appearance bug."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -67,7 +67,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill re-raises unrelated AttributeError."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -88,7 +88,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill with empty form data skips field updates."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -109,7 +109,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill handles radio button groups."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()
@@ -130,7 +130,7 @@ class TestFormFillerFill:
         """Test FormFiller.fill handles listbox fields."""
         filler = FormFiller()
         test_file = tmp_path / "test.pdf"
-        test_file.touch()
+        test_file.write_bytes(b"%PDF-1.4\n")
         output_file = tmp_path / "output.pdf"
 
         mock_reader = MagicMock()

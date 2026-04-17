@@ -24,6 +24,7 @@ from .schema_layout import _build_layout, _build_rows
 # ---------------------------------------------------------------------------
 
 _MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MB
+_MAX_FIELDS = 10_000
 
 
 def _check_input_size(path: Path, max_size: int = _MAX_PDF_SIZE) -> None:
@@ -453,6 +454,9 @@ def parse_pdf(
 
     Returns:
         PDFRepresentation model populated from the PDF.
+
+    Raises:
+        ValueError: If the PDF contains too many fields (>10,000).
     """
     pdf_path = Path(pdf_path)
     _check_input_size(pdf_path)
@@ -466,6 +470,12 @@ def parse_pdf(
 
     if not fields:
         return PDFRepresentation(source=resolved_source)
+
+    if len(fields) > _MAX_FIELDS:
+        raise ValueError(
+            f"PDF contains too many fields: {len(fields)}. "
+            f"Maximum allowed is {_MAX_FIELDS}."
+        )
 
     for name, field_ref in fields.items():
         field_dict = field_ref.get_object() if hasattr(field_ref, "get_object") else field_ref

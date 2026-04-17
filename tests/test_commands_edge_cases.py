@@ -59,7 +59,7 @@ class TestVerifyDataEdgeCases:
         """It raises ValueError when JSON nesting exceeds the limit."""
         nested = {"a": {"b": {"c": {}}}}
         with pytest.raises(ValueError, match="depth"):
-            check_json_depth(nested, depth=0, max_depth=2)
+            check_json_depth(nested, max_depth=2)
 
     def test_safe_json_loads_recursion_error(self) -> None:
         """It raises ValueError on RecursionError from json.loads."""

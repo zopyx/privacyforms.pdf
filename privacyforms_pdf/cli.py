@@ -16,9 +16,34 @@ __all__ = [
     "main",
 ]
 
+# Whitelist of built-in command modules that are trusted
+_TRUSTED_COMMAND_MODULES = {
+    "privacyforms_pdf.commands.pdf_fill_form",
+    "privacyforms_pdf.commands.pdf_info",
+    "privacyforms_pdf.commands.pdf_parse",
+    "privacyforms_pdf.commands.pdf_schema",
+    "privacyforms_pdf.commands.pdf_verify_data",
+    "privacyforms_pdf.commands.pdf_verify_json",
+}
+
 pm = pluggy.PluginManager("privacyforms_pdf")
 pm.add_hookspecs(PDFFormsCommandsSpec)
 pm.load_setuptools_entrypoints("privacyforms_pdf.commands")
+
+
+def _is_trusted_plugin(plugin: object) -> bool:
+    """Return True if *plugin* is from a trusted built-in module."""
+    module = getattr(plugin, "__module__", None)
+    return module in _TRUSTED_COMMAND_MODULES
+
+
+def _register_commands(group: click.Group) -> None:
+    """Register trusted plugin commands onto *group*."""
+    for cmd_list in pm.hook.register_commands():
+        for cmd in cmd_list:
+            if not _is_trusted_plugin(cmd.callback):
+                continue
+            group.add_command(cmd)
 
 
 @click.group()
@@ -34,10 +59,7 @@ def main(ctx: click.Context) -> None:
     ctx.ensure_object(dict)
 
 
-# Register commands from plugins
-for cmd_list in pm.hook.register_commands():
-    for cmd in cmd_list:
-        main.add_command(cmd)
+_register_commands(main)
 
 
 if __name__ == "__main__":  # pragma: no cover
