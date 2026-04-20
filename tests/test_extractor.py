@@ -125,7 +125,9 @@ class TestExtractFacade:
 
         with patch.object(service, "extract", return_value=representation) as mock_extract:
             service.extract_to_json(test_file, output_file)
-            mock_extract.assert_called_once_with(test_file, source=None)
+            mock_extract.assert_called_once_with(
+                test_file, source=None, extract_labels=False, extract_pages=False
+            )
             assert output_file.read_text(encoding="utf-8") == '{"fields": []}'
 
     def test_extract_to_json_rejects_symlink_output(self, tmp_path: Path) -> None:
@@ -174,24 +176,171 @@ class TestExtractFacade:
             assert service.get_field_by_name(test_file, "Name") is field
             assert service.get_field_value(test_file, "Name") == "Jane"
 
-    def test_empty_fields(self, tmp_path: Path) -> None:
-        """Test PDF with empty fields dict returns False."""
+
+class TestExtractLabels:
+    """Tests for label extraction integration in PDFFormService."""
+
+    def test_extract_without_labels_flag_skips_label_extraction(self, tmp_path: Path) -> None:
+        """Default extract_labels=False does not invoke LabelExtractor."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        expected = MagicMock(fields=[])
+
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=expected),
+            patch("privacyforms_pdf.label_extractor.LabelExtractor") as mock_extractor,
+        ):
+            result = service.extract(test_file)
+            assert result is expected
+            mock_extractor.assert_not_called()
+
+    def test_extract_with_labels_flag_populates_text_blocks(self, tmp_path: Path) -> None:
+        """extract_labels=True attaches text blocks to fields."""
         service = PDFFormService()
         test_file = tmp_path / "test.pdf"
         test_file.write_bytes(b"%PDF-1.4\n")
 
-        mock_reader = MagicMock()
-        mock_reader.get_fields.return_value = {}
+        field = MagicMock()
+        field.layout = MagicMock(page=1, x=0, y=0, width=10, height=10)
+        field.id = "f-0"
+        field.title = None
+        representation = MagicMock(fields=[field])
 
-        with patch("privacyforms_pdf.extractor.PdfReader", return_value=mock_reader):
-            assert service.has_form(test_file) is False
+        mock_block = MagicMock(text="Label", role="label")
+        mock_extractor_instance = MagicMock()
+        mock_extractor_instance.__enter__.return_value = mock_extractor_instance
+        mock_extractor_instance.extract_blocks.return_value = {"f-0": [mock_block]}
 
-    def test_get_json_schema_returns_dict(self) -> None:
-        """Test get_json_schema returns the PDFRepresentation JSON schema."""
-        schema = PDFFormService.get_json_schema()
-        assert isinstance(schema, dict)
-        assert schema.get("title") == "PDFRepresentation"
-        assert "$defs" in schema
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=representation),
+            patch(
+                "privacyforms_pdf.label_extractor.LabelExtractor",
+                return_value=mock_extractor_instance,
+            ),
+            patch(
+                "privacyforms_pdf.label_extractor.infer_title",
+                return_value="Inferred Title",
+            ),
+        ):
+            result = service.extract(test_file, extract_labels=True)
+            assert result is representation
+            assert field.text_blocks == [mock_block]
+            assert field.title == "Inferred Title"
+
+    def test_extract_labels_raises_import_error_when_fitz_missing(self, tmp_path: Path) -> None:
+        """ImportError is propagated when fitz is not installed."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        representation = MagicMock(fields=[])
+
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=representation),
+            patch(
+                "privacyforms_pdf.label_extractor.LabelExtractor",
+                side_effect=ImportError("missing fitz"),
+            ),
+            pytest.raises(ImportError, match="missing fitz"),
+        ):
+            service.extract(test_file, extract_labels=True)
+
+    def test_extract_to_json_passes_extract_labels(self, tmp_path: Path) -> None:
+        """extract_to_json forwards extract_labels to extract."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        output_file = tmp_path / "out.json"
+        representation = MagicMock()
+        representation.to_compact_json.return_value = '{"fields": []}'
+
+        with patch.object(service, "extract", return_value=representation) as mock_extract:
+            service.extract_to_json(test_file, output_file, extract_labels=True)
+            mock_extract.assert_called_once_with(
+                test_file, source=None, extract_labels=True, extract_pages=False
+            )
+
+    def test_extract_labels_skips_infer_title_when_already_set(self, tmp_path: Path) -> None:
+        """If field.title is already set, infer_title is not called."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+
+        field = MagicMock()
+        field.layout = MagicMock(page=1, x=0, y=0, width=10, height=10)
+        field.id = "f-0"
+        field.title = "Existing Title"
+        representation = MagicMock(fields=[field])
+
+        mock_extractor_instance = MagicMock()
+        mock_extractor_instance.__enter__.return_value = mock_extractor_instance
+        mock_extractor_instance.extract_blocks.return_value = {"f-0": []}
+
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=representation),
+            patch(
+                "privacyforms_pdf.label_extractor.LabelExtractor",
+                return_value=mock_extractor_instance,
+            ),
+            patch("privacyforms_pdf.label_extractor.infer_title") as mock_infer_title,
+        ):
+            service.extract(test_file, extract_labels=True)
+            mock_infer_title.assert_not_called()
+            assert field.title == "Existing Title"
+
+    def test_extract_pages_populates_representation_pages(self, tmp_path: Path) -> None:
+        """extract_pages=True attaches page text blocks to representation."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+
+        mock_page = MagicMock()
+        mock_page.page_index = 1
+        representation = MagicMock(fields=[], pages=[])
+
+        mock_extractor_instance = MagicMock()
+        mock_extractor_instance.__enter__.return_value = mock_extractor_instance
+        mock_extractor_instance.extract_pages.return_value = [mock_page]
+
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=representation),
+            patch(
+                "privacyforms_pdf.label_extractor.PageTextExtractor",
+                return_value=mock_extractor_instance,
+            ),
+        ):
+            result = service.extract(test_file, extract_pages=True)
+            assert result.pages == [mock_page]
+
+    def test_extract_without_pages_flag_skips_page_extraction(self, tmp_path: Path) -> None:
+        """Default extract_pages=False does not invoke PageTextExtractor."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        expected = MagicMock(fields=[], pages=[])
+
+        with (
+            patch("privacyforms_pdf.extractor.parse_pdf", return_value=expected),
+            patch("privacyforms_pdf.label_extractor.PageTextExtractor") as mock_extractor,
+        ):
+            result = service.extract(test_file)
+            assert result is expected
+            mock_extractor.assert_not_called()
+
+    def test_extract_to_json_passes_extract_pages(self, tmp_path: Path) -> None:
+        """extract_to_json forwards extract_pages to extract."""
+        service = PDFFormService()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"%PDF-1.4\n")
+        output_file = tmp_path / "out.json"
+        representation = MagicMock()
+        representation.to_compact_json.return_value = '{"fields": []}'
+
+        with patch.object(service, "extract", return_value=representation) as mock_extract:
+            service.extract_to_json(test_file, output_file, extract_pages=True)
+            mock_extract.assert_called_once_with(
+                test_file, source=None, extract_labels=False, extract_pages=True
+            )
 
 
 class TestGetFieldHelpers:

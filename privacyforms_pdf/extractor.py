@@ -83,11 +83,46 @@ class PDFFormService:
         pdf_path: str | Path,
         *,
         source: str | None = None,
+        extract_labels: bool = False,
+        extract_pages: bool = False,
     ) -> PDFRepresentation:
-        """Parse a PDF into the canonical PDFRepresentation."""
+        """Parse a PDF into the canonical PDFRepresentation.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            source: Optional source identifier for the document.
+            extract_labels: If True, extract nearby text blocks (labels,
+                descriptions, etc.) using PyMuPDF. Requires the ``[labels]``
+                optional dependency.
+            extract_pages: If True, extract all page text blocks with layout
+                and formatting using PyMuPDF. Requires the ``[labels]``
+                optional dependency.
+        """
         pdf_path = Path(pdf_path)
         validate_pdf_path(pdf_path)
-        return parse_pdf(pdf_path, source=source)
+        representation = parse_pdf(pdf_path, source=source)
+
+        if extract_labels:
+            from privacyforms_pdf.label_extractor import (
+                LabelExtractor,
+                infer_title,
+            )
+
+            with LabelExtractor(pdf_path) as extractor:
+                block_map = extractor.extract_blocks(representation.fields)
+
+            for field in representation.fields:
+                field.text_blocks = block_map.get(field.id, [])
+                if field.title is None:
+                    field.title = infer_title(field)
+
+        if extract_pages:
+            from privacyforms_pdf.label_extractor import PageTextExtractor
+
+            with PageTextExtractor(pdf_path) as extractor:
+                representation.pages = extractor.extract_pages()
+
+        return representation
 
     def extract_to_json(
         self,
@@ -95,9 +130,16 @@ class PDFFormService:
         output_path: str | Path,
         *,
         source: str | None = None,
+        extract_labels: bool = False,
+        extract_pages: bool = False,
     ) -> None:
         """Write the canonical parsed representation to a JSON file."""
-        representation = self.extract(pdf_path, source=source)
+        representation = self.extract(
+            pdf_path,
+            source=source,
+            extract_labels=extract_labels,
+            extract_pages=extract_pages,
+        )
         safe_write_text(Path(output_path), representation.to_compact_json(indent=2))
 
     def list_fields(self, pdf_path: str | Path) -> list[PDFField]:

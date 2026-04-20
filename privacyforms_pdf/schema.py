@@ -7,6 +7,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationInfo,
     field_validator,
     model_serializer,
     model_validator,
@@ -227,6 +228,196 @@ class FieldLayout(BaseModel):
         return value
 
 
+FieldTextRole = Literal[
+    "label",
+    "description",
+    "helper",
+    "instruction",
+    "unknown",
+]
+
+FieldTextDirection = Literal[
+    "left",
+    "right",
+    "above",
+    "below",
+    "inside",
+    "unknown",
+]
+
+
+class FieldTextBlock(BaseModel):
+    """A text block geometrically or semantically associated with a form field."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    text: str = Field(
+        ...,
+        description="Raw text content found near the field.",
+    )
+    role: FieldTextRole = Field(
+        default="unknown",
+        description="Semantic role of the text relative to the field.",
+    )
+    direction: FieldTextDirection = Field(
+        default="unknown",
+        description="Relative position of the text block to the field widget.",
+    )
+    layout: FieldLayout | None = Field(
+        default=None,
+        description="Bounding box of the text block on the page.",
+    )
+    distance: float | None = Field(
+        default=None,
+        description="Distance in PDF units from the nearest field edge to the text block.",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str, info: ValidationInfo) -> str:
+        """Require non-empty text with a reasonable length cap.
+
+        Image blocks (block_type == 1) are exempt from the non-empty
+        requirement since they carry no textual content.
+        """
+        if info.data.get("block_type") == 1:
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("text must not be empty")
+        if len(normalized) > 100_000:
+            raise ValueError("text exceeds maximum length of 100000 characters")
+        return normalized
+
+    @field_validator("distance")
+    @classmethod
+    def validate_distance(cls, value: float | None) -> float | None:
+        """Disallow negative distances."""
+        if value is not None and value < 0:
+            raise ValueError("distance must be non-negative")
+        return value
+
+
+class TextFormat(BaseModel):
+    """Formatting metadata for a text span or block."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    font: str | None = Field(
+        default=None,
+        description="Name of the font family (e.g. 'Helvetica-Bold').",
+    )
+    font_size: float | None = Field(
+        default=None,
+        description="Font size in points.",
+    )
+    color: str | None = Field(
+        default=None,
+        description="Text color as a hex string (e.g. '#000000').",
+    )
+    flags: int | None = Field(
+        default=None,
+        description="Raw PDF font flags integer.",
+    )
+    bold: bool | None = Field(
+        default=None,
+        description="Whether the text is bold (derived from flags).",
+    )
+    italic: bool | None = Field(
+        default=None,
+        description="Whether the text is italic (derived from flags).",
+    )
+
+    @field_validator("font_size")
+    @classmethod
+    def validate_font_size(cls, value: float | None) -> float | None:
+        """Disallow negative font sizes."""
+        if value is not None and value < 0:
+            raise ValueError("font_size must be non-negative")
+        return value
+
+
+class PDFTextBlock(BaseModel):
+    """A text block found anywhere on a PDF page."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    block_type: int | None = Field(
+        default=None,
+        description=("Block type classification: 0 = text, 1 = image (convention from PyMuPDF)."),
+    )
+    text: str = Field(
+        ...,
+        description="Extracted text content of the block.",
+    )
+    layout: FieldLayout | None = Field(
+        default=None,
+        description="Bounding box of the text block on the page.",
+    )
+    format: TextFormat | None = Field(
+        default=None,
+        description="Optional formatting metadata for the block.",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str, info: ValidationInfo) -> str:
+        """Require non-empty text with a reasonable length cap.
+
+        Image blocks (block_type == 1) are exempt from the non-empty
+        requirement since they carry no textual content.
+        """
+        if info.data.get("block_type") == 1:
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("text must not be empty")
+        if len(normalized) > 100_000:
+            raise ValueError("text exceeds maximum length of 100000 characters")
+        return normalized
+
+
+class PDFPage(BaseModel):
+    """Content and geometry of a single PDF page."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    page_index: int = Field(
+        ...,
+        description="One-based index of the page.",
+    )
+    width: float | None = Field(
+        default=None,
+        description="Page width in PDF points.",
+    )
+    height: float | None = Field(
+        default=None,
+        description="Page height in PDF points.",
+    )
+    text_blocks: list[PDFTextBlock] = Field(
+        default_factory=list,
+        description="Text blocks extracted from this page.",
+    )
+
+    @field_validator("page_index")
+    @classmethod
+    def validate_page_index(cls, value: int) -> int:
+        """Require a positive page index."""
+        if value < 1:
+            raise ValueError("page_index must be at least 1")
+        if value > 100_000:
+            raise ValueError("page_index must not exceed 100000")
+        return value
+
+    @field_validator("width", "height")
+    @classmethod
+    def validate_non_negative(cls, value: float | None) -> float | None:
+        """Disallow negative page dimensions."""
+        if value is not None and value < 0:
+            raise ValueError("page dimensions must be non-negative")
+        return value
+
+
 class PDFField(BaseModel):
     """Representation of a single PDF form field."""
 
@@ -268,6 +459,13 @@ class PDFField(BaseModel):
     choices: list[ChoiceOption] = Field(
         default_factory=list,
         description="Structured choices for radio, combo, and list-based fields.",
+    )
+    text_blocks: list[FieldTextBlock] = Field(
+        default_factory=list,
+        description=(
+            "Nearby text blocks associated with this field "
+            "(labels, descriptions, helpers, instructions)."
+        ),
     )
     format: str | None = Field(
         default=None,
@@ -398,7 +596,7 @@ class PDFRepresentation(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
     spec_version: str = Field(
-        default="1.0",
+        default="1.2",
         description="Version of the intermediate representation specification.",
     )
     source: str | None = Field(
@@ -412,6 +610,10 @@ class PDFRepresentation(BaseModel):
     rows: list[RowGroup] = Field(
         default_factory=list,
         description="Optional visual row groupings derived from layout analysis.",
+    )
+    pages: list[PDFPage] = Field(
+        default_factory=list,
+        description="All text blocks extracted from each page.",
     )
 
     @field_validator("spec_version")

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from ..extractor import PDFFormService
 from ..hooks import hookimpl
 from ..parser import extract_pdf_form
 from ..schema import PDFField
@@ -49,8 +50,27 @@ def _print_rows(representation: PDFRepresentation, *, show_ids: bool = False) ->
     default=False,
     help="Display rows using field IDs instead of field names.",
 )
+@click.option(
+    "--labels",
+    "labels",
+    is_flag=True,
+    default=False,
+    help="Extract nearby label text (requires PyMuPDF).",
+)
+@click.option(
+    "--pages",
+    "pages",
+    is_flag=True,
+    default=False,
+    help="Extract all page text blocks with formatting (requires PyMuPDF).",
+)
 def parse_command(
-    pdf_file: Path, output_json: Path | None, output: Path | None, by_id: bool
+    pdf_file: Path,
+    output_json: Path | None,
+    output: Path | None,
+    by_id: bool,
+    labels: bool,
+    pages: bool,
 ) -> None:
     """Parse a fillable PDF into the canonical JSON schema.
 
@@ -63,8 +83,14 @@ def parse_command(
         output_path = output_json if output_json is not None else pdf_file.with_suffix(".json")
 
     try:
-        representation = extract_pdf_form(pdf_file)
+        if labels or pages:
+            service = PDFFormService()
+            representation = service.extract(pdf_file, extract_labels=labels, extract_pages=pages)
+        else:
+            representation = extract_pdf_form(pdf_file)
     except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except ImportError as exc:
         raise click.ClickException(str(exc)) from exc
 
     json_text = representation.to_compact_json(indent=2)

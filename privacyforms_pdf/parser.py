@@ -565,8 +565,8 @@ def parse_pdf(
         max_len = field_dict.get("/MaxLen")
         max_length = int(max_len) if max_len is not None else None
 
-        # Generate a stable id
-        field_id = f"f-{len(pdf_fields)}"
+        # Use the PDF field name as the canonical id
+        field_id = name
 
         # Omit field_flags entirely when no flags are set
         effective_flags = field_flags if flags_int is not None else None

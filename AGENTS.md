@@ -328,6 +328,9 @@ Potential features to implement:
 - Async/await support for I/O operations
 - PDF form creation from scratch
 
+**Implemented:**
+- Label & nearby-text extraction (via optional `PyMuPDF` dependency, `extract_labels=True`)
+
 ---
 
 Last updated: 2026-04-17 (v0.2.0)

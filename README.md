@@ -116,6 +116,34 @@ for field in representation.fields:
     print(field.id, field.name, field.type, field.value)
 ```
 
+### Extract Labels And Nearby Text
+
+Install the optional `labels` dependency (requires **PyMuPDF**):
+
+```bash
+pip install privacyforms.pdf[labels]
+```
+
+CLI:
+
+```bash
+pdf-forms parse form.pdf --labels -o representation.json
+```
+
+Python API:
+
+```python
+from privacyforms_pdf import PDFFormService
+
+service = PDFFormService()
+representation = service.extract("form.pdf", extract_labels=True)
+
+for field in representation.fields:
+    print(field.title)  # best inferred label
+    for block in field.text_blocks:
+        print(block.role, block.direction, block.text)
+```
+
 You can also call `parse_pdf()` directly:
 
 ```python
@@ -180,6 +208,9 @@ Primary exports from `privacyforms_pdf`:
 - `PDFField`
 - `FieldFlags`
 - `FieldLayout`
+- `FieldTextBlock`
+- `FieldTextRole`
+- `FieldTextDirection`
 - `ChoiceOption`
 - `RowGroup`
 - `PDFFormError`
@@ -209,6 +240,7 @@ Main fields:
 - `default_value: str | bool | list[str] | None`
 - `value: str | bool | list[str] | None`
 - `choices: list[ChoiceOption]`
+- `text_blocks: list[FieldTextBlock]` — nearby labels, descriptions, helpers
 - `format: str | None`
 - `max_length: int | None`
 - `textarea_rows: int | None`
@@ -234,6 +266,16 @@ Layout hints are stored in integer PDF coordinates:
 - `y: int | None`
 - `width: int | None`
 - `height: int | None`
+
+### `FieldTextBlock`
+
+Nearby text associated with a field (populated when `extract_labels=True`):
+
+- `text: str`
+- `role: "label" | "description" | "helper" | "instruction" | "unknown"`
+- `direction: "left" | "right" | "above" | "below" | "inside" | "unknown"`
+- `layout: FieldLayout | None`
+- `distance: float | None`
 
 ### `RowGroup`
 

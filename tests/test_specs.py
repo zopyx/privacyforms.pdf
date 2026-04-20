@@ -19,9 +19,14 @@ from privacyforms_pdf.parser import extract_pdf_form, parse_pdf
 from privacyforms_pdf.schema import (
     ChoiceOption,
     FieldFlags,
+    FieldLayout,
+    FieldTextBlock,
     PDFField,
+    PDFPage,
     PDFRepresentation,
+    PDFTextBlock,
     RowGroup,
+    TextFormat,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -317,3 +322,157 @@ class TestPDFParserIntegration:
         restored = PDFRepresentation.model_validate_json(json_text)
         assert len(restored.fields) == len(result.fields)
         assert len(restored.rows) == len(result.rows)
+
+
+class TestFieldTextBlockSchema:
+    """Tests for FieldTextBlock validation."""
+
+    def test_valid_field_text_block(self) -> None:
+        """Test a minimal valid FieldTextBlock."""
+        block = FieldTextBlock(text="First Name")
+        assert block.text == "First Name"
+        assert block.role == "unknown"
+        assert block.direction == "unknown"
+
+    def test_field_text_block_with_layout(self) -> None:
+        """Test FieldTextBlock with layout."""
+        block = FieldTextBlock(
+            text="First Name",
+            role="label",
+            direction="left",
+            layout=FieldLayout(page=1, x=10, y=20, width=80, height=12),
+            distance=5.5,
+        )
+        assert block.role == "label"
+        assert block.direction == "left"
+        assert block.layout is not None
+        assert block.layout.x == 10
+
+    def test_field_text_block_rejects_empty_text(self) -> None:
+        """Test FieldTextBlock rejects empty text."""
+        with pytest.raises(ValueError, match="text must not be empty"):
+            FieldTextBlock(text="   ")
+
+    def test_field_text_block_rejects_whitespace_only(self) -> None:
+        """Test FieldTextBlock rejects whitespace-only text."""
+        with pytest.raises(ValueError, match="text must not be empty"):
+            FieldTextBlock(text="")
+
+    def test_field_text_block_rejects_too_long_text(self) -> None:
+        """Test FieldTextBlock rejects text over 100k characters."""
+        with pytest.raises(ValueError, match="text exceeds maximum length"):
+            FieldTextBlock(text="x" * 100_001)
+
+    def test_field_text_block_accepts_exactly_100k(self) -> None:
+        """Test FieldTextBlock accepts exactly 100k characters."""
+        block = FieldTextBlock(text="x" * 100_000)
+        assert len(block.text) == 100_000
+
+    def test_pdffield_accepts_text_blocks(self) -> None:
+        """Test PDFField accepts text_blocks list."""
+        block = FieldTextBlock(text="Name", role="label", direction="left")
+        field = PDFField(name="Name", id="f-1", type="textfield", text_blocks=[block])
+        assert len(field.text_blocks) == 1
+        assert field.text_blocks[0].text == "Name"
+
+    def test_old_json_without_text_blocks_deserializes(self) -> None:
+        """Test backward compatibility: JSON without text_blocks loads fine."""
+        json_text = (
+            '{"spec_version": "1.1", "fields": [{"name": "A", "id": "f-1", "type": "textfield"}]}'
+        )
+        rep = PDFRepresentation.model_validate_json(json_text)
+        assert len(rep.fields) == 1
+        assert rep.fields[0].text_blocks == []
+
+    def test_compact_json_omits_empty_text_blocks(self) -> None:
+        """Test compact JSON omits empty text_blocks."""
+        field = PDFField(name="A", id="f-1", type="textfield")
+        rep = PDFRepresentation(fields=[field])
+        json_text = rep.to_compact_json()
+        data = json.loads(json_text)
+        assert "text_blocks" not in data["fields"][0]
+
+    def test_compact_json_includes_text_blocks_when_present(self) -> None:
+        """Test compact JSON includes text_blocks when populated."""
+        block = FieldTextBlock(text="Name", role="label")
+        field = PDFField(name="A", id="f-1", type="textfield", text_blocks=[block])
+        rep = PDFRepresentation(fields=[field])
+        json_text = rep.to_compact_json()
+        data = json.loads(json_text)
+        assert "text_blocks" in data["fields"][0]
+        assert data["fields"][0]["text_blocks"][0]["text"] == "Name"
+
+    def test_field_text_block_rejects_negative_distance(self) -> None:
+        """Test FieldTextBlock rejects negative distance."""
+        with pytest.raises(ValueError, match="distance must be non-negative"):
+            FieldTextBlock(text="Name", distance=-1.0)
+
+    def test_field_text_block_accepts_zero_distance(self) -> None:
+        """Test FieldTextBlock accepts zero distance."""
+        block = FieldTextBlock(text="Name", distance=0.0)
+        assert block.distance == 0.0
+
+    def test_field_text_block_accepts_none_distance(self) -> None:
+        """Test FieldTextBlock accepts None distance."""
+        block = FieldTextBlock(text="Name", distance=None)
+        assert block.distance is None
+
+
+class TestPDFPageSchema:
+    """Tests for PDFPage and PDFTextBlock validation."""
+
+    def test_valid_pdf_page(self) -> None:
+        """Test a minimal valid PDFPage."""
+        page = PDFPage(page_index=1, width=612.0, height=792.0)
+        assert page.page_index == 1
+        assert page.text_blocks == []
+
+    def test_pdf_page_with_text_blocks(self) -> None:
+        """Test PDFPage with text blocks."""
+        block = PDFTextBlock(
+            text="Hello",
+            layout=FieldLayout(page=1, x=10, y=20, width=100, height=12),
+            format=TextFormat(font="Helvetica", font_size=10.0),
+        )
+        page = PDFPage(page_index=1, text_blocks=[block])
+        assert len(page.text_blocks) == 1
+        assert page.text_blocks[0].text == "Hello"
+
+    def test_pdf_page_rejects_zero_index(self) -> None:
+        """Test PDFPage rejects page_index=0."""
+        with pytest.raises(ValueError, match="page_index must be at least 1"):
+            PDFPage(page_index=0)
+
+    def test_pdf_text_block_rejects_empty_text(self) -> None:
+        """Test PDFTextBlock rejects empty text."""
+        with pytest.raises(ValueError, match="text must not be empty"):
+            PDFTextBlock(text="   ")
+
+    def test_pdf_text_block_accepts_image_block(self) -> None:
+        """Test PDFTextBlock accepts image block_type."""
+        block = PDFTextBlock(text="", layout=None, block_type=1)
+        assert block.block_type == 1
+
+    def test_text_format_rejects_negative_font_size(self) -> None:
+        """Test TextFormat rejects negative font_size."""
+        with pytest.raises(ValueError, match="font_size must be non-negative"):
+            TextFormat(font_size=-1.0)
+
+    def test_pdf_representation_accepts_pages(self) -> None:
+        """Test PDFRepresentation accepts pages list."""
+        page = PDFPage(page_index=1)
+        rep = PDFRepresentation(fields=[], pages=[page])
+        assert len(rep.pages) == 1
+
+    def test_old_json_without_pages_deserializes(self) -> None:
+        """Backward compatibility: JSON without pages loads fine."""
+        json_text = '{"spec_version": "1.2", "fields": []}'
+        rep = PDFRepresentation.model_validate_json(json_text)
+        assert rep.pages == []
+
+    def test_compact_json_omits_empty_pages(self) -> None:
+        """Test compact JSON omits empty pages."""
+        rep = PDFRepresentation(fields=[])
+        json_text = rep.to_compact_json()
+        data = json.loads(json_text)
+        assert "pages" not in data

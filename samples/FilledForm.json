@@ -489,7 +489,7 @@
     {
       "name": "Candidate Name",
       "id": "f-29",
-      "type": "datefield",
+      "type": "textfield",
       "layout": {
         "page": 1,
         "x": 53,

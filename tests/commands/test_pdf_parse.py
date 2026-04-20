@@ -127,3 +127,109 @@ class TestParseCommand:
 
         assert result.exit_code != 0
         assert "Refusing to write to symlink" in result.output
+
+    def test_parse_with_labels_flag(self, tmp_path: Path) -> None:
+        """Test parse command with --labels uses PDFFormService.extract."""
+        runner = CliRunner()
+        pdf_file = tmp_path / "form.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+        field = PDFField(
+            name="Name",
+            id="f-0",
+            type="textfield",
+            layout=FieldLayout(page=1, x=0, y=0, width=50, height=20),
+        )
+        representation = PDFRepresentation(
+            spec_version="1.1", source="form.pdf", fields=[field], rows=[]
+        )
+
+        with patch("privacyforms_pdf.commands.pdf_parse.PDFFormService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.extract.return_value = representation
+            result = runner.invoke(main, ["parse", str(pdf_file), "--labels"])
+
+        assert result.exit_code == 0
+        mock_service.extract.assert_called_once_with(
+            pdf_file, extract_labels=True, extract_pages=False
+        )
+
+    def test_parse_labels_flag_import_error(self, tmp_path: Path) -> None:
+        """Test --labels handles missing PyMuPDF gracefully."""
+        runner = CliRunner()
+        pdf_file = tmp_path / "form.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+        with patch("privacyforms_pdf.commands.pdf_parse.PDFFormService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.extract.side_effect = ImportError("missing fitz")
+            result = runner.invoke(main, ["parse", str(pdf_file), "--labels"])
+
+        assert result.exit_code != 0
+        assert "missing fitz" in result.output
+
+    def test_parse_with_pages_flag(self, tmp_path: Path) -> None:
+        """Test parse command with --pages uses PDFFormService.extract."""
+        runner = CliRunner()
+        pdf_file = tmp_path / "form.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+        field = PDFField(
+            name="Name",
+            id="f-0",
+            type="textfield",
+            layout=FieldLayout(page=1, x=0, y=0, width=50, height=20),
+        )
+        representation = PDFRepresentation(
+            spec_version="1.1", source="form.pdf", fields=[field], rows=[]
+        )
+
+        with patch("privacyforms_pdf.commands.pdf_parse.PDFFormService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.extract.return_value = representation
+            result = runner.invoke(main, ["parse", str(pdf_file), "--pages"])
+
+        assert result.exit_code == 0
+        mock_service.extract.assert_called_once_with(
+            pdf_file, extract_labels=False, extract_pages=True
+        )
+
+    def test_parse_with_both_flags(self, tmp_path: Path) -> None:
+        """Test parse command with both --labels and --pages."""
+        runner = CliRunner()
+        pdf_file = tmp_path / "form.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+        field = PDFField(
+            name="Name",
+            id="f-0",
+            type="textfield",
+            layout=FieldLayout(page=1, x=0, y=0, width=50, height=20),
+        )
+        representation = PDFRepresentation(
+            spec_version="1.1", source="form.pdf", fields=[field], rows=[]
+        )
+
+        with patch("privacyforms_pdf.commands.pdf_parse.PDFFormService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.extract.return_value = representation
+            result = runner.invoke(main, ["parse", str(pdf_file), "--labels", "--pages"])
+
+        assert result.exit_code == 0
+        mock_service.extract.assert_called_once_with(
+            pdf_file, extract_labels=True, extract_pages=True
+        )
+
+    def test_parse_pages_flag_import_error(self, tmp_path: Path) -> None:
+        """Test --pages handles missing PyMuPDF gracefully."""
+        runner = CliRunner()
+        pdf_file = tmp_path / "form.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+
+        with patch("privacyforms_pdf.commands.pdf_parse.PDFFormService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.extract.side_effect = ImportError("missing fitz")
+            result = runner.invoke(main, ["parse", str(pdf_file), "--pages"])
+
+        assert result.exit_code != 0
+        assert "missing fitz" in result.output
