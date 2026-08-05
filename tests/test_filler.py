@@ -250,7 +250,7 @@ class TestFormFillerSyncRadioButtonStates:
         link_ref.get_object.return_value = {"/Subtype": "/Link"}
 
         writer.pages = [{"/Annots": [link_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
         filler._sync_radio_button_states(writer, {"Choice": "/Yes"})
 
     def test_sync_radio_skips_non_radio_buttons(self) -> None:
@@ -262,7 +262,7 @@ class TestFormFillerSyncRadioButtonStates:
         text_ref.get_object.return_value = {"/Subtype": "/Widget", "/FT": "/Tx", "/T": "Name"}
 
         writer.pages = [{"/Annots": [text_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="textfield"):
             filler._sync_radio_button_states(writer, {"Choice": "/Yes"})
@@ -280,7 +280,7 @@ class TestFormFillerSyncRadioButtonStates:
         }
 
         writer.pages = [{"/Annots": [checkbox_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
             filler._sync_radio_button_states(writer, {"Agree": "/Yes"})
@@ -320,7 +320,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         }
 
         writer.pages = [{"/Annots": [text_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="textfield"):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
@@ -338,7 +338,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         }
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"):
             filler._sync_listbox_selection_indexes(writer, {"Colors": "Red"})
@@ -364,7 +364,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with (
             patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
@@ -388,7 +388,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         from pypdf.generic import NameObject
 
@@ -419,7 +419,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         mock_ref = NameObject("/Ref")
 
@@ -446,7 +446,7 @@ class TestFormFillerSyncListboxSelectionIndexes:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="combobox"):
             filler._sync_listbox_selection_indexes(writer, {"Country": "USA"})
@@ -532,7 +532,7 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
 
         writer = MagicMock()
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         filler._fill_form_fields_without_appearance(writer, {"Name": "John"})
         assert parent_annotation["/V"] == TextStringObject("John")
@@ -547,7 +547,7 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
 
         writer = MagicMock()
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with (
             patch("privacyforms_pdf.filler.get_field_type", return_value="radiobuttongroup"),
@@ -567,7 +567,7 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
 
         writer = MagicMock()
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with (
             patch("privacyforms_pdf.filler.get_field_type", side_effect=lambda a: "listbox"),
@@ -590,7 +590,7 @@ class TestFormFillerFillFormFieldsWithoutAppearance:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with (
             patch("privacyforms_pdf.filler.get_field_type", return_value="listbox"),
@@ -665,7 +665,7 @@ class TestFormFillerFillFormFieldsWithoutAppearanceEdgeCases:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         filler._fill_form_fields_without_appearance(writer, {"Name": "John"})
         assert "/V" not in widget
@@ -684,7 +684,7 @@ class TestFormFillerFillFormFieldsWithoutAppearanceEdgeCases:
 
         writer = MagicMock()
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
             filler._fill_form_fields_without_appearance(writer, {"Agree": "/Yes"})
@@ -707,7 +707,7 @@ class TestFormFillerFillFormFieldsWithoutAppearanceEdgeCases:
 
         writer = MagicMock()
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         with patch("privacyforms_pdf.filler.get_field_type", return_value="checkbox"):
             filler._fill_form_fields_without_appearance(writer, {"Agree": "Yes"})
@@ -754,7 +754,7 @@ class TestFormFillerGetFieldByNameFromWriter:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         result = filler.get_field_by_name_from_writer(writer, "Name")
         assert result is None
@@ -773,7 +773,7 @@ class TestFormFillerGetFieldByNameFromWriter:
         widget_ref.get_object.return_value = widget
 
         writer.pages = [{"/Annots": [widget_ref]}]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         result = filler.get_field_by_name_from_writer(writer, "Name")
         assert result is widget
@@ -803,7 +803,7 @@ class TestFormFillerGetFieldByNameFromWriter:
             {"/Annots": [first_ref]},
             {"/Annots": [second_ref]},
         ]
-        writer._get_qualified_field_name.side_effect = lambda a: a.get("/T", "")
+        writer._get_qualified_field_name.side_effect = lambda *, parent: parent.get("/T", "")
 
         result = filler.get_field_by_name_from_writer(writer, "Second")
         assert result is second_widget

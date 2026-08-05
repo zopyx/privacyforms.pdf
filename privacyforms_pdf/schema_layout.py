@@ -43,7 +43,7 @@ def _build_rows(fields: Sequence[PDFField], y_tolerance: int = 15) -> list[RowGr
     for page_idx in sorted(page_fields.keys()):
         pf = page_fields[page_idx]
         # Sort by y descending (top of page first)
-        pf.sort(key=lambda f: -(f.layout.y if f.layout else 0))
+        pf.sort(key=lambda f: -(f.layout.y if f.layout and f.layout.y is not None else 0))
 
         current_row: list[PDFField] = []
         current_y = 0

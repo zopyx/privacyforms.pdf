@@ -9,6 +9,7 @@ This module is optional. It requires PyMuPDF (``fitz``) which can be installed v
 from __future__ import annotations
 
 import re
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -65,7 +66,7 @@ class _RawTextBlock(NamedTuple):
 def _require_fitz() -> Any:
     """Import fitz and raise a helpful error if it is missing."""
     try:
-        import fitz
+        fitz = import_module("fitz")
     except ImportError as exc:
         raise ImportError(
             "Label extraction requires PyMuPDF. "

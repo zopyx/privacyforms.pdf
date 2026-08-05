@@ -37,7 +37,7 @@ class TestMain:
         with patch("demo.fill_sample.Path") as mock_path_cls:
             mock_pdf = MagicMock()
             mock_pdf.exists.return_value = False
-            mock_pdf.__str__ = lambda self: "samples/FilledForm.pdf"
+            mock_pdf.configure_mock(**{"__str__.return_value": "samples/FilledForm.pdf"})
             mock_path_cls.side_effect = lambda p: (
                 mock_pdf if p == "samples/FilledForm.pdf" else Path(p)
             )
@@ -98,7 +98,7 @@ class TestMain:
         ):
             mock_pdf = MagicMock()
             mock_pdf.exists.return_value = True
-            mock_pdf.__str__ = lambda self: "samples/FilledForm.pdf"
+            mock_pdf.configure_mock(**{"__str__.return_value": "samples/FilledForm.pdf"})
             mock_path_cls.side_effect = lambda p: (
                 mock_pdf if p == "samples/FilledForm.pdf" else Path(p)
             )
