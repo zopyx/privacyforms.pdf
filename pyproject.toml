@@ -30,6 +30,11 @@ schema = "privacyforms_pdf.commands.pdf_schema"
 verify_data = "privacyforms_pdf.commands.pdf_verify_data"
 verify_json = "privacyforms_pdf.commands.pdf_verify_json"
 
+[project.urls]
+Homepage = "https://github.com/zopyx/privacyforms.pdf"
+Repository = "https://github.com/zopyx/privacyforms.pdf"
+Issues = "https://github.com/zopyx/privacyforms.pdf/issues"
+
 [build-system]
 requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
