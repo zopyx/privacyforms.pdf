@@ -163,7 +163,7 @@ Tests use `unittest.mock.patch` to mock:
 
 | Workflow | File | Trigger |
 |----------|------|---------|
-| CI | `.github/workflows/ci.yml` | Push/PR to main/master |
+| CI | `.github/workflows/ci.yml` | Push/PR to main |
 
 ### CI Jobs
 
@@ -333,4 +333,4 @@ Potential features to implement:
 
 ---
 
-Last updated: 2026-04-17 (v0.2.0)
+Last updated: 2026-08-20 (v1.0.0a1)

@@ -493,10 +493,11 @@ class FormFiller:
 
         pdf_path = Path(pdf_path)
 
-        own_reader = reader is None
-        if own_reader:
+        if reader is None:
             reader = PdfReader(str(pdf_path))
-        assert reader is not None
+            own_reader = True
+        else:
+            own_reader = False
         fields = reader.get_fields() or {}
         writer = PdfWriter()
         writer.append(reader)

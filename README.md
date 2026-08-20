@@ -3,7 +3,7 @@
 [![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/privacyforms.pdf)](https://pypi.org/project/privacyforms.pdf/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zopyx/privacyforms.pdf/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zopyx/privacyforms.pdf/blob/main/LICENSE)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
 
 Python library for parsing and filling PDF forms using [pypdf](https://pypdf.readthedocs.io/).

@@ -275,15 +275,13 @@ class PDFFormService:
         )
         errors.extend(normalization_errors)
 
-        own_reader = reader is None
-        if own_reader:
+        if reader is None:
             try:
                 reader = PdfReader(str(pdf_path))
             except Exception as exc:
                 errors.append(f"Could not read PDF: {exc}")
                 return errors
 
-        assert reader is not None
         fields = reader.get_fields() or {}
         fields_by_name: dict[str, dict[str, Any]] = dict(fields)
 
