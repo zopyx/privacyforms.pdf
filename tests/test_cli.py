@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from privacyforms_pdf import __version__
 from privacyforms_pdf.cli import _is_trusted_plugin, main
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ class TestMainCommand:
         """Test main command shows version."""
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.2.0" in result.output
+        assert __version__ in result.output
 
 
 class TestPluginTrust:
