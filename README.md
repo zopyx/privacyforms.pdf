@@ -3,7 +3,6 @@
 [![CI](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/zopyx/privacyforms.pdf/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/zopyx/privacyforms.pdf/branch/master/graph/badge.svg)](https://codecov.io/gh/zopyx/privacyforms.pdf)
 [![PyPI](https://img.shields.io/pypi/v/privacyforms.pdf)](https://pypi.org/project/privacyforms.pdf/)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zopyx/privacyforms.pdf/blob/master/LICENSE)
 [![uv](https://img.shields.io/badge/uv-managed-purple.svg)](https://github.com/astral-sh/uv)
