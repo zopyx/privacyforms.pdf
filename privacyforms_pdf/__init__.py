@@ -25,7 +25,7 @@ from .schema import (
     TextFormat,
 )
 
-__version__ = "0.2.0"
+__version__ = "1.0.0a1"
 __all__ = [
     # Main orchestrator
     "PDFFormService",
