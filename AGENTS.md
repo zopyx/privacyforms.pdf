@@ -333,4 +333,4 @@ Potential features to implement:
 
 ---
 
-Last updated: 2026-08-20 (v1.0.0a1)
+Last updated: 2026-09-21 (v1.0.0a2)

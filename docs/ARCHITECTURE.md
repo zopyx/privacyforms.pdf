@@ -1,6 +1,6 @@
 # privacyforms-pdf — Technical Documentation
 
-> **Version:** 1.0.0a1
+> **Version:** 1.0.0a2
 > **Scope:** Current package architecture, public API, CLI wiring, and data flow.
 
 ## Architecture Overview

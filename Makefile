@@ -57,7 +57,8 @@ type-check:
 	uv run ty check
 
 audit:
-	uv run pip-audit
+	# PYSEC-2026-3740 (nltk 3.10.3, dev-only via safety): no fix version published yet.
+	uv run pip-audit --ignore-vuln PYSEC-2026-3740
 
 check: lint format-check type-check audit
 	@echo "All checks passed!"
@@ -104,7 +105,7 @@ release: check test build
 	@git diff-index --quiet HEAD -- || (echo "Working tree is not clean. Commit or stash changes before release." && exit 1)
 	@git rev-parse "$(TAG)" >/dev/null 2>&1 && (echo "Tag $(TAG) already exists." && exit 1) || true
 	git tag -a "$(TAG)" -m "Release $(TAG)"
-	git push origin master
+	git push origin main
 	git push origin "$(TAG)"
 	@echo "Release $(TAG) created and pushed."
 	@echo "Run 'make upload' to publish to PyPI."
