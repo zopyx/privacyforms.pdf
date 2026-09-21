@@ -15,12 +15,37 @@ from privacyforms_pdf.label_extractor import (
     _infer_role,
     _RawTextBlock,
     _rect_contains,
+    _require_pymupdf,
     infer_title,
 )
 from privacyforms_pdf.schema import FieldLayout, FieldTextBlock, PDFField
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class TestRequirePymupdf:
+    """Tests for the _require_pymupdf helper."""
+
+    def test_prefers_modern_module_name(self) -> None:
+        """The modern ``pymupdf`` module is imported when available."""
+        sentinel = MagicMock()
+        with patch.dict("sys.modules", {"pymupdf": sentinel, "fitz": MagicMock()}):
+            assert _require_pymupdf() is sentinel
+
+    def test_falls_back_to_legacy_fitz_module(self) -> None:
+        """PyMuPDF releases without a top-level ``pymupdf`` module use ``fitz``."""
+        sentinel = MagicMock()
+        with patch.dict("sys.modules", {"pymupdf": None, "fitz": sentinel}):
+            assert _require_pymupdf() is sentinel
+
+    def test_raises_import_error_when_unavailable(self) -> None:
+        """A missing PyMuPDF installation raises a helpful ImportError."""
+        with (
+            patch.dict("sys.modules", {"pymupdf": None, "fitz": None}),
+            pytest.raises(ImportError, match="Label extraction requires PyMuPDF"),
+        ):
+            _require_pymupdf()
 
 
 class TestRectContains:
@@ -175,14 +200,14 @@ class TestProximityMatcher:
 
 
 class TestLabelExtractor:
-    """Tests for LabelExtractor with mocked fitz."""
+    """Tests for LabelExtractor with mocked PyMuPDF."""
 
-    def test_missing_fitz_raises_import_error(self, tmp_path: Path) -> None:
-        """LabelExtractor raises ImportError when fitz is missing."""
+    def test_missing_pymupdf_raises_import_error(self, tmp_path: Path) -> None:
+        """LabelExtractor raises ImportError when PyMuPDF is missing."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\n")
         with (
-            patch.dict("sys.modules", {"fitz": None}),
+            patch.dict("sys.modules", {"pymupdf": None, "fitz": None}),
             pytest.raises(ImportError, match="Label extraction requires PyMuPDF"),
         ):
             LabelExtractor(pdf_file)
@@ -202,8 +227,8 @@ class TestLabelExtractor:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 2
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -212,7 +237,7 @@ class TestLabelExtractor:
             layout=FieldLayout(page=1, x=100, y=750, width=50, height=20),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -236,8 +261,8 @@ class TestLabelExtractor:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -246,7 +271,7 @@ class TestLabelExtractor:
             layout=FieldLayout(page=1, x=100, y=750, width=50, height=20),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -260,8 +285,8 @@ class TestLabelExtractor:
         mock_doc = MagicMock()
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -270,7 +295,7 @@ class TestLabelExtractor:
             layout=FieldLayout(page=99, x=0, y=0, width=10, height=10),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -323,15 +348,15 @@ class TestLabelExtractorContextManager:
     """Tests for LabelExtractor context manager protocol."""
 
     def test_context_manager_closes_document(self, tmp_path: Path) -> None:
-        """__exit__ calls close on the underlying fitz document."""
+        """__exit__ calls close on the underlying PyMuPDF document."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\n")
 
         mock_doc = MagicMock()
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             with LabelExtractor(pdf_file) as extractor:
                 assert isinstance(extractor, LabelExtractor)
             mock_doc.close.assert_called_once()
@@ -368,8 +393,8 @@ class TestLabelExtractorEdgeCases:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -378,7 +403,7 @@ class TestLabelExtractorEdgeCases:
             layout=None,
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -392,8 +417,8 @@ class TestLabelExtractorEdgeCases:
         mock_doc = MagicMock()
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -402,7 +427,7 @@ class TestLabelExtractorEdgeCases:
             layout=FieldLayout(page=0, x=0, y=0, width=10, height=10),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -424,8 +449,8 @@ class TestLabelExtractorEdgeCases:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -434,7 +459,7 @@ class TestLabelExtractorEdgeCases:
             layout=FieldLayout(page=1, x=100, y=750, width=50, height=20),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -457,8 +482,8 @@ class TestLabelExtractorEdgeCases:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
         field = PDFField(
             name="Name",
@@ -467,7 +492,7 @@ class TestLabelExtractorEdgeCases:
             layout=FieldLayout(page=1, x=100, y=750, width=50, height=20),
         )
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = LabelExtractor(pdf_file)
             result = extractor.extract_blocks([field])
 
@@ -477,12 +502,12 @@ class TestLabelExtractorEdgeCases:
 class TestPageTextExtractor:
     """Tests for PageTextExtractor."""
 
-    def test_missing_fitz_raises_import_error(self, tmp_path: Path) -> None:
-        """PageTextExtractor raises ImportError when fitz is missing."""
+    def test_missing_pymupdf_raises_import_error(self, tmp_path: Path) -> None:
+        """PageTextExtractor raises ImportError when PyMuPDF is missing."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\n")
         with (
-            patch.dict("sys.modules", {"fitz": None}),
+            patch.dict("sys.modules", {"pymupdf": None, "fitz": None}),
             pytest.raises(ImportError, match="Label extraction requires PyMuPDF"),
         ):
             PageTextExtractor(pdf_file)
@@ -495,10 +520,10 @@ class TestPageTextExtractor:
         mock_doc = MagicMock()
         mock_doc.__len__ = lambda _self: 0
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = PageTextExtractor(pdf_file)
             result = extractor.extract_pages()
 
@@ -538,10 +563,10 @@ class TestPageTextExtractor:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = PageTextExtractor(pdf_file)
             result = extractor.extract_pages()
 
@@ -579,10 +604,10 @@ class TestPageTextExtractor:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = PageTextExtractor(pdf_file)
             result = extractor.extract_pages()
 
@@ -621,10 +646,10 @@ class TestPageTextExtractor:
         mock_doc.load_page.return_value = mock_page
         mock_doc.__len__ = lambda _self: 1
 
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             extractor = PageTextExtractor(pdf_file)
             result = extractor.extract_pages()
 
@@ -637,10 +662,10 @@ class TestPageTextExtractor:
         pdf_file.write_bytes(b"%PDF-1.4\n")
 
         mock_doc = MagicMock()
-        mock_fitz = MagicMock()
-        mock_fitz.open.return_value = mock_doc
+        mock_pymupdf = MagicMock()
+        mock_pymupdf.open.return_value = mock_doc
 
-        with patch("privacyforms_pdf.label_extractor._require_fitz", return_value=mock_fitz):
+        with patch("privacyforms_pdf.label_extractor._require_pymupdf", return_value=mock_pymupdf):
             with PageTextExtractor(pdf_file) as extractor:
                 assert isinstance(extractor, PageTextExtractor)
             mock_doc.close.assert_called_once()

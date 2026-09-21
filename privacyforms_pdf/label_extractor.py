@@ -1,6 +1,6 @@
 """Extract nearby text blocks (labels, descriptions, etc.) for PDF form fields.
 
-This module is optional. It requires PyMuPDF (``fitz``) which can be installed via:
+This module is optional. It requires PyMuPDF (``pymupdf``) which can be installed via:
 
     pip install privacyforms.pdf[labels]
 
@@ -63,16 +63,21 @@ class _RawTextBlock(NamedTuple):
     text: str
 
 
-def _require_fitz() -> Any:
-    """Import fitz and raise a helpful error if it is missing."""
-    try:
-        fitz = import_module("fitz")
-    except ImportError as exc:
-        raise ImportError(
-            "Label extraction requires PyMuPDF. "
-            "Install it with: pip install privacyforms.pdf[labels]"
-        ) from exc
-    return fitz
+# Modern module name first: importing the legacy ``fitz`` alias emits
+# "The `fitz` API is deprecated and will be removed in future." on PyMuPDF >= 1.24.
+_PYMUPDF_MODULES = ("pymupdf", "fitz")
+
+
+def _require_pymupdf() -> Any:
+    """Import PyMuPDF and raise a helpful error if it is missing."""
+    for module_name in _PYMUPDF_MODULES:
+        try:
+            return import_module(module_name)
+        except ImportError:
+            continue
+    raise ImportError(
+        "Label extraction requires PyMuPDF. Install it with: pip install privacyforms.pdf[labels]"
+    )
 
 
 def _rect_contains(
@@ -228,8 +233,8 @@ class LabelExtractor:
             pdf_path: Path to the PDF file.
         """
         self._pdf_path = pdf_path
-        self._fitz = _require_fitz()
-        self._doc = self._fitz.open(str(pdf_path))
+        self._pymupdf = _require_pymupdf()
+        self._doc = self._pymupdf.open(str(pdf_path))
 
     def __enter__(self) -> LabelExtractor:
         """Enter context manager."""
@@ -298,8 +303,8 @@ class PageTextExtractor:
             pdf_path: Path to the PDF file.
         """
         self._pdf_path = Path(pdf_path)
-        self._fitz = _require_fitz()
-        self._doc = self._fitz.open(str(self._pdf_path))
+        self._pymupdf = _require_pymupdf()
+        self._doc = self._pymupdf.open(str(self._pdf_path))
 
     def __enter__(self) -> PageTextExtractor:
         """Enter context manager."""
